@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faEnvelope, faLock } from '@fortawesome/free-solid-svg-icons';
 import { faGoogle, faFacebookF } from '@fortawesome/free-brands-svg-icons';
 import { loginCustomer } from '../../services/customerService';
 import { login } from '../../services/authService';
@@ -8,6 +9,7 @@ import '../../assets/css/LoginPage.css';
 
 const LoginPage = () => {
   const navigate = useNavigate();
+  const [userType, setUserType] = useState('customer');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -16,6 +18,8 @@ const LoginPage = () => {
   const handleUserTypeChange = (type) => {
     if (type === 'vendor') {
       navigate('/vendor-login');
+    } else {
+      setUserType(type);
     }
   };
 
@@ -50,18 +54,19 @@ const LoginPage = () => {
 
   return (
     <div className="login-page">
-      <div className="login-container">
-        <h1 className="login-title">Login to Your Account</h1>
-        <p className="login-subtitle">Welcome back! Please enter your details to access your account.</p>
+      <div className="login-card">
+        <h1>Login to Your Account</h1>
+        <p className="subtitle">Welcome back! Please enter your details to access your account.</p>
 
-        <div className="user-type-tabs">
-          <button 
-            className="tab-button active"
+        <div className="user-type-toggle">
+          <button
+            className={`toggle-btn ${userType === 'customer' ? 'active' : ''}`}
+            onClick={() => handleUserTypeChange('customer')}
           >
             Customer
           </button>
-          <button 
-            className="tab-button"
+          <button
+            className={`toggle-btn ${userType === 'vendor' ? 'active' : ''}`}
             onClick={() => handleUserTypeChange('vendor')}
           >
             Vendor
@@ -77,30 +82,36 @@ const LoginPage = () => {
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label htmlFor="email">Email Address</label>
-            <input
-              type="email"
-              id="email"
-              placeholder="Enter your email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
+            <div className="input-with-icon">
+              
+              <input
+                type="email"
+                id="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+            </div>
           </div>
 
           <div className="form-group">
             <label htmlFor="password">Password</label>
-            <input
-              type="password"
-              id="password"
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
+            <div className="input-with-icon">
+              
+              <input
+                type="password"
+                id="password"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
           </div>
 
-          <div className="forgot-password-container">
-            <Link to="/forgot-password" className="forgot-password-link">
+          <div className="form-options">
+            <Link to="/forgot-password" className="forgot-password">
               Forgot Password?
             </Link>
           </div>
@@ -108,24 +119,24 @@ const LoginPage = () => {
           <button type="submit" className="login-button" disabled={loading}>
             {loading ? 'Logging in...' : 'Login'}
           </button>
+
+          <div className="divider">
+            <span>Or continue with</span>
+          </div>
+
+          <div className="social-login">
+            <button type="button" className="google-btn">
+              <FontAwesomeIcon icon={faGoogle} /> Google
+            </button>
+            <button type="button" className="facebook-btn">
+              <FontAwesomeIcon icon={faFacebookF} /> Facebook
+            </button>
+          </div>
+
+          <p className="register-prompt">
+            Don't have an account? <Link to="/register" className="register-link">Register Now</Link>
+          </p>
         </form>
-
-        <div className="divider">
-          <span>Or continue with</span>
-        </div>
-
-        <div className="social-login">
-          <button className="social-button google">
-            <FontAwesomeIcon icon={faGoogle} /> Google
-          </button>
-          <button className="social-button facebook">
-            <FontAwesomeIcon icon={faFacebookF} /> Facebook
-          </button>
-        </div>
-
-        <div className="register-prompt">
-          <p>Don't have an account? <Link to="/register" className="register-link">Register Now</Link></p>
-        </div>
       </div>
     </div>
   );

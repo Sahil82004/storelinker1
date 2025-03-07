@@ -15,7 +15,7 @@ const HomePage = () => {
             <div className="hero-text">
               <h2>Connect with the Best Stores</h2>
               <p>Digitize Your Store, Simplify Shopping – Find, Compare, and Save Instantly!</p>
-              <Link to="/category/featured" className="btn btn-primary">SHOP NOW</Link>
+              
             </div>
             <div className="hero-image">
               <img src="https://img.freepik.com/free-vector/ecommerce-checkout-laptop-concept-illustration_114360-8203.jpg?ga=GA1.1.924815405.1740815173&semt=ais_hybrid" alt="Women's Fashion Sale" />

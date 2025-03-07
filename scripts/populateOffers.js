@@ -1,7 +1,7 @@
 const { MongoClient } = require('mongodb');
 const { sampleOffers } = require('../src/data/sampleOffers');
 
-const uri = "mongodb+srv://sahil:sahil@storelinker.btnxy.mongodb.net/?retryWrites=true&w=majority&appName=STORELINKER";
+const uri = "mongodb+srv://sahil:sahil123@storelinker.btnxy.mongodb.net/?retryWrites=true&w=majority&appName=STORELINKER";
 
 async function populateOffers() {
   const client = new MongoClient(uri);

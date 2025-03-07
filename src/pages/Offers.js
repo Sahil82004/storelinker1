@@ -27,60 +27,7 @@ const OfferCard = styled(Card)(({ theme }) => ({
   },
 }));
 
-// Mock data for offers
-const OFFERS = [
-  {
-    id: 1,
-    category: 'electronics',
-    title: "Mega Electronics Sale",
-    description: "Up to 75% off on Electronics",
-    validUntil: "2024-04-30",
-    image: "https://m.media-amazon.com/images/I/61SSVxTSs3L._SL1500_.jpg",
-    discount: 75,
-    products: [
-      {
-        name: "Noise Smart Watch",
-        price: 1999,
-        originalPrice: 7999,
-        image: "https://m.media-amazon.com/images/I/61SSVxTSs3L._SL1500_.jpg"
-      }
-    ]
-  },
-  {
-    id: 2,
-    category: 'electronics',
-    title: "Printer & Accessories",
-    description: "Up to 29% off on Printers",
-    validUntil: "2024-04-25",
-    image: "https://m.media-amazon.com/images/I/71cX92XQKIL._SL1500_.jpg",
-    discount: 29,
-    products: [
-      {
-        name: "Dinojames Batch Coding Machine",
-        price: 2498,
-        originalPrice: 3500,
-        image: "https://m.media-amazon.com/images/I/71cX92XQKIL._SL1500_.jpg"
-      }
-    ]
-  },
-  {
-    id: 3,
-    category: 'computers',
-    title: "Laptop Deals",
-    description: "Save big on Laptops",
-    validUntil: "2024-04-28",
-    image: "https://m.media-amazon.com/images/I/71xT5UKxcTL._SL1500_.jpg",
-    discount: 10,
-    products: [
-      {
-        name: "Dell XPS 15",
-        price: 1799,
-        originalPrice: 1999,
-        image: "https://m.media-amazon.com/images/I/71xT5UKxcTL._SL1500_.jpg"
-      }
-    ]
-  }
-];
+
 
 export default function Offers() {
   const [selectedTab, setSelectedTab] = React.useState(0);

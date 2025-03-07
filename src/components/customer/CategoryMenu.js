@@ -28,6 +28,7 @@ export default function CategoryMenu() {
   const handleClose = () => {
     setAnchorEl(null);
   };
+  
 
   return (
     <>

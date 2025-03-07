@@ -19,6 +19,7 @@ import OrdersPage from './components/pages/OrdersPage';
 import AboutPage from './components/pages/AboutPage';
 import ContactPage from './components/pages/ContactPage';
 import { isLoggedIn, mockLogin } from './services/authService';
+import { CartProvider } from './context/CartContext';
 import './assets/css/App.css';
 
 function App() {
@@ -32,41 +33,43 @@ function App() {
   }, []);
 
   return (
-    <Router>
-      <div className="App">
-        <Routes>
-          {/* Vendor Routes - No Header/Footer */}
-          <Route path="/vendor-login" element={<VendorLoginPage />} />
-          <Route path="/vendor-register" element={<VendorRegisterPage />} />
-          <Route path="/vendor-dashboard" element={<VendorDashboard />} />
-          <Route path="/add-product" element={<AddProductPage />} />
-          <Route path="/edit-product/:productId" element={<EditProductPage />} />
-          
-          {/* Customer Routes - With Header/Footer */}
-          <Route path="*" element={
-            <>
-              <Header />
-              <main>
-                <Routes>
-                  <Route path="/" element={<HomePage />} />
-                  <Route path="/login" element={<LoginPage />} />
-                  <Route path="/register" element={<RegisterPage />} />
-                  <Route path="/cart" element={<CartPage />} />
-                  <Route path="/checkout" element={<CheckoutPage />} />
-                  <Route path="/orders" element={<OrdersPage />} />
-                  <Route path="/offers" element={<OffersPage />} />
-                  <Route path="/about" element={<AboutPage />} />
-                  <Route path="/contact" element={<ContactPage />} />
-                  <Route path="/category/:category" element={<ProductListingPage />} />
-                  <Route path="/product/:productId" element={<ProductDetailPage />} />
-                </Routes>
-              </main>
-              <Footer />
-            </>
-          } />
-        </Routes>
-      </div>
-    </Router>
+    <CartProvider>
+      <Router>
+        <div className="App">
+          <Routes>
+            {/* Vendor Routes - No Header/Footer */}
+            <Route path="/vendor-login" element={<VendorLoginPage />} />
+            <Route path="/vendor-register" element={<VendorRegisterPage />} />
+            <Route path="/vendor-dashboard" element={<VendorDashboard />} />
+            <Route path="/add-product" element={<AddProductPage />} />
+            <Route path="/edit-product/:productId" element={<EditProductPage />} />
+            
+            {/* Customer Routes - With Header/Footer */}
+            <Route path="*" element={
+              <>
+                <Header />
+                <main>
+                  <Routes>
+                    <Route path="/" element={<HomePage />} />
+                    <Route path="/login" element={<LoginPage />} />
+                    <Route path="/register" element={<RegisterPage />} />
+                    <Route path="/cart" element={<CartPage />} />
+                    <Route path="/checkout" element={<CheckoutPage />} />
+                    <Route path="/orders" element={<OrdersPage />} />
+                    <Route path="/offers" element={<OffersPage />} />
+                    <Route path="/about" element={<AboutPage />} />
+                    <Route path="/contact" element={<ContactPage />} />
+                    <Route path="/category/:category" element={<ProductListingPage />} />
+                    <Route path="/product/:productId" element={<ProductDetailPage />} />
+                  </Routes>
+                </main>
+                <Footer />
+              </>
+            } />
+          </Routes>
+        </div>
+      </Router>
+    </CartProvider>
   );
 }
 

@@ -14,7 +14,7 @@ app.use(cors());
 app.use(express.json());
 
 // MongoDB Connection URL
-const uri = "mongodb+srv://sahil:sahil@storelinker.btnxy.mongodb.net/?retryWrites=true&w=majority&appName=STORELINKER";
+const uri = "mongodb+srv://sahil:sahil123@storelinker.btnxy.mongodb.net/?retryWrites=true&w=majority&appName=STORELINKER";
 const client = new MongoClient(uri);
 
 async function connectDB() {

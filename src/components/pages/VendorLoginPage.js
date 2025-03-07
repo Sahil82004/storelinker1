@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faLock, faEnvelope } from '@fortawesome/free-solid-svg-icons';
-import { faGoogle, faFacebookF } from '@fortawesome/free-brands-svg-icons';
+import { faStore, faLock, faEnvelope } from '@fortawesome/free-solid-svg-icons';
 import { loginVendor } from '../../services/vendorService';
 import '../../assets/css/VendorLoginPage.css';
 
@@ -37,30 +36,13 @@ const VendorLoginPage = () => {
     }
   };
 
-  const handleUserTypeChange = (type) => {
-    if (type === 'customer') {
-      navigate('/login');
-    }
-  };
-
   return (
     <div className="vendor-login-page">
       <div className="login-container">
-        <h1 className="login-title">Login to Your Account</h1>
-        <p className="login-subtitle">Welcome back! Please enter your details to access your account.</p>
-
-        <div className="user-type-tabs">
-          <button 
-            className="tab-button"
-            onClick={() => handleUserTypeChange('customer')}
-          >
-            Customer
-          </button>
-          <button 
-            className="tab-button active"
-          >
-            Vendor
-          </button>
+        <div className="login-header">
+          <FontAwesomeIcon icon={faStore} className="store-icon" />
+          <h1>Vendor Login</h1>
+          <p>Access your store dashboard</p>
         </div>
 
         {error && (
@@ -71,7 +53,9 @@ const VendorLoginPage = () => {
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label htmlFor="email">Email Address</label>
+            <label htmlFor="email">
+              <FontAwesomeIcon icon={faEnvelope} /> Email Address
+            </label>
             <input
               type="email"
               id="email"
@@ -84,7 +68,9 @@ const VendorLoginPage = () => {
           </div>
 
           <div className="form-group">
-            <label htmlFor="password">Password</label>
+            <label htmlFor="password">
+              <FontAwesomeIcon icon={faLock} /> Password
+            </label>
             <input
               type="password"
               id="password"
@@ -96,32 +82,15 @@ const VendorLoginPage = () => {
             />
           </div>
 
-          <div className="forgot-password-container">
-            <Link to="/vendor-forgot-password" className="forgot-password-link">
-              Forgot Password?
-            </Link>
-          </div>
-
           <button type="submit" className="login-button" disabled={loading}>
             {loading ? 'Logging in...' : 'Login'}
           </button>
         </form>
 
-        <div className="divider">
-          <span>Or continue with</span>
-        </div>
-
-        <div className="social-login">
-          <button className="social-button google">
-            <FontAwesomeIcon icon={faGoogle} /> Google
-          </button>
-          <button className="social-button facebook">
-            <FontAwesomeIcon icon={faFacebookF} /> Facebook
-          </button>
-        </div>
-
-        <div className="register-prompt">
-          <p>Don't have an account? <Link to="/vendor-register" className="register-link">Register Now</Link></p>
+        <div className="login-footer">
+          
+          <p className="mt-3">Don't have a vendor account?</p>
+          <Link to="/vendor-register" className="register-link">Register as Vendor</Link>
         </div>
       </div>
     </div>

@@ -1,12 +1,18 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useCart } from '../../context/CartContext';
+import CartPreview from '../common/CartPreview';
 import '../../assets/css/OffersPage.css';
 import { formatPrice } from '../../utils/priceFormatter';
 
 const OffersPage = () => {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [discountFilter, setDiscountFilter] = useState('');
+  const [notification, setNotification] = useState({ show: false, message: '' });
+  const [showCartPreview, setShowCartPreview] = useState(false);
   
+  const { addToCart } = useCart();
+
   // Sample offer data
   const offers = [
     {
@@ -16,7 +22,7 @@ const OffersPage = () => {
       originalPrice: 49999,
       currentPrice: 34999,
       discount: 30,
-      image: '/api/placeholder/400/320',
+      image: 'https://m.media-amazon.com/images/I/81cbFZwHYYL._SX522_.jpg',
       daysLeft: 3
     },
     {
@@ -26,7 +32,7 @@ const OffersPage = () => {
       originalPrice: 8999,
       currentPrice: 6749,
       discount: 25,
-      image: '/api/placeholder/400/320',
+      image: 'https://m.media-amazon.com/images/I/41kIdIZD3xL._SX300_SY300_QL70_FMwebp_.jpg',
       daysLeft: 5
     },
     {
@@ -36,7 +42,7 @@ const OffersPage = () => {
       originalPrice: 5999,
       currentPrice: 3599,
       discount: 40,
-      image: '/api/placeholder/400/320',
+      image: 'https://m.media-amazon.com/images/I/41d-FY7iVsL._SX300_SY300_QL70_FMwebp_.jpg',
       daysLeft: 2
     },
     {
@@ -46,7 +52,7 @@ const OffersPage = () => {
       originalPrice: 4999,
       currentPrice: 2499,
       discount: 50,
-      image: '/api/placeholder/400/320',
+      image: 'https://m.media-amazon.com/images/I/715bXrrOVHL._SX695_.jpg',
       daysLeft: 0
     },
     {
@@ -56,7 +62,7 @@ const OffersPage = () => {
       originalPrice: 2999,
       currentPrice: 1949,
       discount: 35,
-      image: '/api/placeholder/400/320',
+      image: 'https://studdmuffyn.com/cdn/shop/files/001.jpg?v=1729352582&width=1800',
       daysLeft: 7
     },
     {
@@ -66,10 +72,52 @@ const OffersPage = () => {
       originalPrice: 49999,
       currentPrice: 39999,
       discount: 20,
-      image: '/api/placeholder/400/320',
+      image: 'https://images.samsung.com/is/image/samsung/assets/in/smartphones/galaxy-s24-fe/buy/S24_FE_Group_KV_Global_PC.jpg?imbypass=true',
       daysLeft: 10
     }
   ];
+  
+  // Handle add to cart
+  const handleAddToCart = (offer) => {
+    const product = {
+      id: offer.id,
+      title: offer.title,
+      currentPrice: offer.currentPrice,
+      originalPrice: offer.originalPrice,
+      image: offer.image,
+      category: offer.category,
+      discount: offer.discount,
+      quantity: 1
+    };
+
+    try {
+      addToCart(product);
+      
+      // Show notification
+      setNotification({
+        show: true,
+        message: `${offer.title} added to cart!`
+      });
+
+      // Show cart preview
+      setShowCartPreview(true);
+
+      // Hide notification after 3 seconds
+      setTimeout(() => {
+        setNotification({ show: false, message: '' });
+      }, 3000);
+      
+    } catch (error) {
+      setNotification({
+        show: true,
+        message: "Error adding item to cart. Please try again."
+      });
+      
+      setTimeout(() => {
+        setNotification({ show: false, message: '' });
+      }, 3000);
+    }
+  };
   
   // Filter offers based on selected filters
   const filteredOffers = offers.filter(offer => {
@@ -88,11 +136,22 @@ const OffersPage = () => {
   
   return (
     <div className="container">
+      {notification.show && (
+        <div className="notification">
+          {notification.message}
+        </div>
+      )}
+
+      <CartPreview 
+        show={showCartPreview} 
+        onClose={() => setShowCartPreview(false)} 
+      />
+      
       <div className="banner">
         <div className="banner-content">
           <h2>Limited Time Deals!</h2>
           <p>Save up to 50% on top products across all categories. Extra 10% off with code: SAVE10</p>
-          <button className="banner-button">Shop Now</button>
+          
         </div>
         <div className="banner-image">
           <img src="https://png.pngtree.com/png-vector/20191120/ourmid/pngtree-special-offer-sale-banner-template-design-with-colorful-design-isolated-on-png-image_2007314.jpg" alt="Special Offers Banner" />
@@ -149,7 +208,12 @@ const OffersPage = () => {
                   ? 'Offer ends today!' 
                   : `Offer ends in ${offer.daysLeft} day${offer.daysLeft > 1 ? 's' : ''}`}
               </p>
-              <button className="action-button">Add to Cart</button>
+              <button 
+                className="action-button"
+                onClick={() => handleAddToCart(offer)}
+              >
+                Add to Cart
+              </button>
             </div>
           </div>
         ))}

@@ -84,7 +84,7 @@ const mockProducts = [
     rating: 4.3,
     reviewCount: 112,
     images: [
-      'https://m.media-amazon.com/images/I/71Gn7eWoLUL._SX522_.jpg'
+      'https://img.freepik.com/free-photo/television-houseplant-table_23-2148995236.jpg'
     ],
     store: {
       name: 'AudioTech',
@@ -519,7 +519,394 @@ const mockProducts = [
       'Light Needs': 'Low to medium',
       'Water Needs': 'Low'
     }
-  }
+  },
+
+  //beauty and health
+    {
+      id: 101,
+      name: 'Premium Skincare Set',
+      description: 'Complete 5-step skincare routine with cleanser, toner, serum, moisturizer, and sunscreen. Made with natural ingredients for all skin types. Helps reduce fine lines and improve skin texture.',
+      price: 3499,
+      discountPrice: 2999,
+      rating: 4.7,
+      reviewCount: 86,
+      images: [
+        'https://img.freepik.com/free-photo/flat-lay-natural-cosmetic-products_23-2148614058.jpg',
+        'https://img.freepik.com/free-photo/cosmetic-bottle-containers-with-green-leaves_23-2148646664.jpg',
+        'https://img.freepik.com/free-photo/white-beauty-cream-bottles_23-2148765186.jpg'
+      ],
+      store: {
+        name: 'GlowEssentials',
+        rating: 4.6,
+        location: 'Mumbai',
+        responseTime: '1 hour'
+      },
+      category: 'beauty and health',
+      stock: 22,
+      features: [
+        'Natural ingredients',
+        'Paraben-free',
+        'Suitable for all skin types',
+        'Dermatologically tested',
+        'Cruelty-free'
+      ],
+      specifications: {
+        'Brand': 'GlowEssentials',
+        'Set Contents': '5 items',
+        'Skin Type': 'All',
+        'Volume': '50ml each',
+        'Shelf Life': '12 months'
+      }
+    },
+    {
+      id: 102,
+      name: 'Digital Body Weight Scale',
+      description: 'Smart bathroom scale with high precision sensors. Measures weight, BMI, body fat, muscle mass, and more. Syncs wirelessly with fitness apps to track your progress.',
+      price: 2499,
+      discountPrice: 1899,
+      rating: 4.4,
+      reviewCount: 153,
+      images: [
+        'https://img.freepik.com/free-photo/close-up-modern-electronic-scale-white-background_23-2148181010.jpg',
+        'https://img.freepik.com/free-photo/modern-electronic-body-fat-analyzer-scale-white-background_23-2148181012.jpg',
+        'https://img.freepik.com/free-photo/modern-electronic-scales-white-tile-floor_23-2147930553.jpg'
+      ],
+      store: {
+        name: 'HealthMate',
+        rating: 4.5,
+        location: 'Bangalore',
+        responseTime: '3 hours'
+      },
+      category: 'beauty and health',
+      stock: 38,
+      features: [
+        'High-precision sensors',
+        'Multiple measurement metrics',
+        'App connectivity',
+        'Large LED display',
+        'Auto on/off function'
+      ],
+      specifications: {
+        'Brand': 'HealthMate',
+        'Model': 'HM-BS100',
+        'Material': 'Tempered glass',
+        'Power': '3 AAA batteries',
+        'Weight Capacity': 'Up to 180kg',
+        'Accuracy': '±0.1kg'
+      }
+    },
+  
+  // Sports and Outdoors Products
+  
+    {
+      id: 201,
+      name: 'Yoga Mat with Carry Strap',
+      description: 'Eco-friendly, non-slip yoga mat with alignment markings. Perfect thickness for joint protection and stability. Includes carrying strap for easy transport to your yoga class or workout space.',
+      price: 1299,
+      discountPrice: 999,
+      rating: 4.6,
+      reviewCount: 92,
+      images: [
+        'https://img.freepik.com/free-photo/pink-yoga-mat-with-pink-background_23-2148637959.jpg',
+        'https://img.freepik.com/free-photo/blue-yoga-mat-white-background_53876-104028.jpg',
+        'https://img.freepik.com/free-photo/top-view-rolled-yoga-mat_23-2148626553.jpg'
+      ],
+      store: {
+        name: 'FitLife',
+        rating: 4.7,
+        location: 'Delhi',
+        responseTime: '2 hours'
+      },
+      category: 'sports and outdoors',
+      stock: 65,
+      features: [
+        'Eco-friendly TPE material',
+        'Non-slip texture',
+        'Alignment markings',
+        'Carrying strap included',
+        'Easy to clean'
+      ],
+      specifications: {
+        'Brand': 'FitLife',
+        'Model': 'FL-YM2023',
+        'Material': 'TPE',
+        'Thickness': '6mm',
+        'Dimensions': '183cm x 61cm',
+        'Weight': '0.9kg'
+      }
+    },
+    {
+      id: 202,
+      name: 'Camping Tent 4-Person',
+      description: 'Waterproof 4-person camping tent with quick setup design. Features double-layer construction for all-weather protection. Includes ventilation windows and storage pockets for a comfortable outdoor experience.',
+      price: 5999,
+      discountPrice: 4499,
+      rating: 4.3,
+      reviewCount: 78,
+      images: [
+        'https://img.freepik.com/free-photo/tourist-camping-tent-camp-among-meadow-with-sunset-light-background_1150-16377.jpg',
+        'https://img.freepik.com/free-photo/camping-tents-under-pine-forest-sunset-uttarakhand-india_1150-14056.jpg',
+        'https://img.freepik.com/free-photo/inside-orange-yellow-camping-tent-bright-sunny-day_1268-2058.jpg'
+      ],
+      store: {
+        name: 'OutdoorPro',
+        rating: 4.5,
+        location: 'Pune',
+        responseTime: '4 hours'
+      },
+      category: 'sports and outdoors',
+      stock: 18,
+      features: [
+        'Quick setup design',
+        'Waterproof construction',
+        'Double-layer protection',
+        'Ventilation windows',
+        'Storage pockets'
+      ],
+      specifications: {
+        'Brand': 'OutdoorPro',
+        'Model': 'OP-CT4',
+        'Capacity': '4 persons',
+        'Material': 'Polyester with PU coating',
+        'Poles': 'Fiberglass',
+        'Dimensions': '240cm x 210cm x 130cm',
+        'Weight': '3.5kg'
+      }
+    },
+  
+  
+  // Toys and Games Products
+  
+    {
+      id: 301,
+      name: 'Educational Building Blocks Set',
+      description: '120-piece colorful building blocks for kids ages 3+. Develops creativity, motor skills, and spatial reasoning. Compatible with major building block brands for endless expansion possibilities.',
+      price: 1299,
+      discountPrice: 999,
+      rating: 4.8,
+      reviewCount: 214,
+      images: [
+        'https://img.freepik.com/free-photo/colorful-plastic-constructor-white-background_93675-132367.jpg',
+        'https://img.freepik.com/free-photo/plastic-toy-blocks-with-numbers-white-background_93675-132363.jpg',
+        'https://img.freepik.com/free-photo/close-up-colorful-plastic-blocks_23-2147925655.jpg'
+      ],
+      store: {
+        name: 'KidsCorner',
+        rating: 4.7,
+        location: 'Chennai',
+        responseTime: '1 hour'
+      },
+      category: 'toys and games',
+      stock: 42,
+      features: [
+        '120 pieces in vibrant colors',
+        'Non-toxic materials',
+        'Compatible with major brands',
+        'Storage bucket included',
+        'Develops cognitive and motor skills'
+      ],
+      specifications: {
+        'Brand': 'KidsCorner',
+        'Model': 'KC-BB120',
+        'Age Range': '3+ years',
+        'Material': 'BPA-free plastic',
+        'Number of Pieces': '120',
+        'Weight': '0.8kg'
+      }
+    },
+    {
+      id: 302,
+      name: 'Strategy Board Game',
+      description: 'Family strategy game for 2-6 players. Build your civilization, gather resources, and outmaneuver opponents in this engaging board game. Average game time: 45-60 minutes. Perfect for game nights!',
+      price: 1799,
+      discountPrice: 1499,
+      rating: 4.6,
+      reviewCount: 67,
+      images: [
+        'https://img.freepik.com/free-photo/top-view-board-game-pieces-with-dice_23-2148696425.jpg',
+        'https://img.freepik.com/free-photo/two-people-playing-board-game_23-2149430589.jpg',
+        'https://img.freepik.com/free-photo/yellow-board-game-pieces-with-dice_23-2148696414.jpg'
+      ],
+      store: {
+        name: 'GameMaster',
+        rating: 4.9,
+        location: 'Hyderabad',
+        responseTime: '2 hours'
+      },
+      category: 'toys and games',
+      stock: 25,
+      features: [
+        'Strategic gameplay',
+        'For 2-6 players',
+        'High-quality game components',
+        'Includes game board, cards, pieces, and dice',
+        'Multiple play strategies'
+      ],
+      specifications: {
+        'Brand': 'GameMaster',
+        'Model': 'GM-SG2023',
+        'Age Range': '10+ years',
+        'Players': '2-6',
+        'Game Duration': '45-60 minutes',
+        'Components': '1 board, 150 cards, 96 game pieces, 4 dice'
+      }
+    },
+  
+  
+  // Books and Media Products
+  
+    {
+      id: 401,
+      name: 'Bestselling Mystery Novel',
+      description: 'Award-winning mystery thriller that keeps you on the edge of your seat. Follow Detective Sarah Jones as she unravels a complex web of deception in this page-turner from acclaimed author J.R. Mitchell.',
+      price: 599,
+      discountPrice: 449,
+      rating: 4.5,
+      reviewCount: 182,
+      images: [
+        'https://img.freepik.com/free-photo/book-composition-with-open-book_23-2147690555.jpg',
+        'https://img.freepik.com/free-photo/high-angle-open-books-wooden-surface_23-2149029861.jpg',
+        'https://img.freepik.com/free-photo/book-library-with-open-textbook_1150-5920.jpg'
+      ],
+      store: {
+        name: 'BookWorld',
+        rating: 4.8,
+        location: 'Kolkata',
+        responseTime: '3 hours'
+      },
+      category: 'books and media',
+      stock: 57,
+      features: [
+        'Hardcover edition',
+        'Award-winning mystery novel',
+        '350 pages',
+        'Published in 2023',
+        'Includes bonus author interview'
+      ],
+      specifications: {
+        'Author': 'J.R. Mitchell',
+        'Publisher': 'Literary Press',
+        'Language': 'English',
+        'Paperback': '350 pages',
+        'ISBN-10': '1234567890',
+        'Dimensions': '20 x 13 x 2.5 cm'
+      }
+    },
+    {
+      id: 402,
+      name: 'Wireless Headphones with Microphone',
+      description: 'Premium wireless headphones with active noise cancellation and built-in microphone. Perfect for music, podcasts, virtual meetings, and calls. Enjoy up to 25 hours of playtime with quick charging capability.',
+      price: 4999,
+      discountPrice: 3799,
+      rating: 4.4,
+      reviewCount: 108,
+      images: [
+        'https://img.freepik.com/free-photo/black-wireless-earbuds-with-charging-case_23-2148779883.jpg',
+        'https://img.freepik.com/free-photo/black-earbuds-charging-case_23-2148779876.jpg',
+        'https://img.freepik.com/free-photo/white-headphones-concept-listening-music_23-2150251774.jpg'
+      ],
+      store: {
+        name: 'MediaMart',
+        rating: 4.6,
+        location: 'Ahmedabad',
+        responseTime: '2 hours'
+      },
+      category: 'books and media',
+      stock: 33,
+      features: [
+        'Active Noise Cancellation',
+        'Bluetooth 5.1 connectivity',
+        '25-hour battery life',
+        'Built-in microphone',
+        'Quick charging'
+      ],
+      specifications: {
+        'Brand': 'MediaMart',
+        'Model': 'MM-WH250',
+        'Color': 'Black',
+        'Connectivity': 'Bluetooth 5.1',
+        'Battery Life': '25 hours',
+        'Weight': '220g'
+      }
+    },
+  
+    // Automotive Products
+
+    {
+      id: 501,
+      name: 'Car Dash Camera',
+      description: 'Full HD dash cam with 170° wide-angle lens and night vision. Features loop recording, G-sensor for automatic accident detection, and parking monitor. Easy installation and operation for enhanced driving safety.',
+      price: 3499,
+      discountPrice: 2799,
+      rating: 4.3,
+      reviewCount: 94,
+      images: [
+        'https://img.freepik.com/free-photo/close-up-dashboard-camera-car_23-2149010697.jpg',
+        'https://img.freepik.com/free-photo/inside-car-view-with-dashboard-camera_23-2149010734.jpg',
+        'https://img.freepik.com/free-photo/dashboard-camera-car_23-2149010729.jpg'
+      ],
+      store: {
+        name: 'AutoTech',
+        rating: 4.5,
+        location: 'Jaipur',
+        responseTime: '3 hours'
+      },
+      category: 'automotive',
+      stock: 29,
+      features: [
+        'Full HD 1080p recording',
+        '170° wide-angle lens',
+        'Night vision capability',
+        'G-sensor for accident detection',
+        'Parking monitor'
+      ],
+      specifications: {
+        'Brand': 'AutoTech',
+        'Model': 'AT-DC100',
+        'Resolution': '1080p',
+        'Storage': 'Supports up to 128GB SD card',
+        'Power Supply': '12V/24V',
+        'Dimensions': '8.5 x 5.3 x 3.6 cm'
+      }
+    },
+    {
+      id: 502,
+      name: 'Car Vacuum Cleaner',
+      description: 'Powerful 12V portable vacuum cleaner for your vehicle. Comes with multiple attachments to reach tight spaces. Strong suction removes dirt, dust, and debris from your car interior with ease.',
+      price: 1999,
+      discountPrice: 1499,
+      rating: 4.2,
+      reviewCount: 76,
+      images: [
+        'https://img.freepik.com/free-photo/close-up-vacuum-cleaner-car_23-2149010727.jpg',
+        'https://img.freepik.com/free-photo/vacuum-cleaner-using-car_23-2149010713.jpg',
+        'https://img.freepik.com/free-photo/man-cleaning-his-car-with-vacuum_23-2149010725.jpg'
+      ],
+      store: {
+        name: 'CarCare',
+        rating: 4.4,
+        location: 'Lucknow',
+        responseTime: '2 hours'
+      },
+      category: 'automotive',
+      stock: 48,
+      features: [
+        'Powerful 120W motor',
+        'Wet and dry cleaning',
+        'Multiple attachments included',
+        '5-meter power cord',
+        'Washable HEPA filter'
+      ],
+      specifications: {
+        'Brand': 'CarCare',
+        'Model': 'CC-VC120',
+        'Power': '120W',
+        'Voltage': '12V DC',
+        'Cable Length': '5 meters',
+        'Weight': '1.2kg'
+      }
+    }
+  
 ];
 
 // Simulated MongoDB-like functions

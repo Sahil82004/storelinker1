@@ -1,4 +1,4 @@
-import { products, offers } from './mockData';
+import { products, offers } from './mockProduct';
 
 // Simulate API delay
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
