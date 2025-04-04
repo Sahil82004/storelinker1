@@ -44,6 +44,7 @@ const ProductListingPage = () => {
     };
     
     fetchProducts();
+    
   }, [category]);
 
   const handleProductClick = (productId) => {

@@ -309,6 +309,95 @@
   color: #666;
 }
 
+/* Featured Stores Section */
+.featured-stores {
+  padding: 60px 0;
+  background-color: #f8f9fa;
+}
+
+.stores-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+  margin-top: 40px;
+}
+
+.store-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.store-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.store-field label {
+  font-weight: 500;
+  color: #333;
+  font-size: 0.9rem;
+}
+
+.field-value {
+  color: #666;
+  font-size: 1rem;
+  padding: 8px;
+  background: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e1e1e1;
+}
+
+.btn-visit {
+  margin-top: 10px;
+  background: #4a6cf7;
+  color: white;
+  padding: 12px;
+  border-radius: 6px;
+  text-decoration: none;
+  text-align: center;
+  font-weight: 500;
+  transition: background-color 0.3s ease;
+}
+
+.btn-visit:hover {
+  background: #4a6cf7;
+}
+
+.no-stores-message {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 40px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.no-stores-message p {
+  color: #666;
+  margin-bottom: 15px;
+}
+
+.btn-register {
+  display: inline-block;
+  background: #4a6cf7;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 500;
+  transition: background-color 0.3s ease;
+}
+
+.btn-register:hover {
+  background: #4a6cf7;
+}
+
 /* Responsive Styles */
 @media (max-width: 992px) {
   .hero-content {
@@ -347,6 +436,15 @@
   .products-grid, .offers-grid {
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   }
+
+  .stores-grid {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+
+  .store-card {
+    padding: 15px;
+  }
 }
 
 @media (max-width: 576px) {
@@ -359,6 +457,10 @@
   }
   
   .products-grid, .offers-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stores-grid {
     grid-template-columns: 1fr;
   }
 }

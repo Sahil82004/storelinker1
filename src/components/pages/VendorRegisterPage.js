@@ -1,16 +1,21 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faCheckCircle, faExclamationCircle, faInfoCircle, faTimes, faCalendarAlt, faStore, faLock, faEnvelope, faUser, faPhone, faLocationDot, faCity, faMapPin } from '@fortawesome/free-solid-svg-icons';
+import {
+  faUser,
+  faEnvelope,
+  faLock,
+  faPhone,
+  faLocationDot,
+  faCity,
+  faMapPin,
+  faStore
+} from '@fortawesome/free-solid-svg-icons';
 import { registerVendor } from '../../services/vendorService';
-import '../../assets/css/VendorRegisterPage.css';
+import '../../assets/css/RegisterPage.css';
 
 const VendorRegisterPage = () => {
   const navigate = useNavigate();
-  const [notification, setNotification] = useState(null);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -23,23 +28,16 @@ const VendorRegisterPage = () => {
     state: '',
     zipCode: ''
   });
-  
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
   const handleChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
     });
   };
-  
-  const showNotification = (message, type = 'success') => {
-    setNotification({ message, type });
-    
-    // Auto-remove after 5 seconds
-    setTimeout(() => {
-      setNotification(null);
-    }, 5000);
-  };
-  
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -53,28 +51,54 @@ const VendorRegisterPage = () => {
     }
 
     try {
-      await registerVendor(formData);
-      navigate('/vendor-login');
+      const { confirmPassword, ...registrationData } = formData;
+      
+      // Add vendor type and additional fields
+      const vendorData = {
+        ...registrationData,
+        userType: 'vendor',
+        registrationDate: new Date().toISOString(),
+        active: true
+      };
+      
+      console.log('Registering vendor with data:', vendorData);
+      
+      // Save to database through API
+      const result = await registerVendor(vendorData);
+      
+      console.log('Registration response:', result);
+      
+      if (result && result.user) {
+        // Show success message
+        alert('Registration successful! Please login.');
+        navigate('/vendor-login');
+      } else {
+        throw new Error('Registration failed: No user data returned');
+      }
     } catch (err) {
-      setError(err.message || 'Registration failed');
+      console.error('Vendor registration error:', err);
+      setError(err.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
-  
+
   return (
-    <div className="vendor-register-page">
-      <div className="container registration-container">
-        <h1>Vendor Registration</h1>
-        <p className="registration-subtitle">Please fill out the form below to register as a vendor on our platform.</p>
-        
+    <div className="register-page">
+      <div className="register-container">
+        <div className="register-header">
+          <FontAwesomeIcon icon={faStore} className="user-icon" />
+          <h1>Vendor Registration</h1>
+          <p>Join us to start selling on our platform</p>
+        </div>
+
         {error && (
           <div className="error-message">
             {error}
           </div>
         )}
-        
-        <form id="vendorRegistrationForm" onSubmit={handleSubmit}>
+
+        <form onSubmit={handleSubmit}>
           <div className="form-row">
             <div className="form-group">
               <label htmlFor="email">
@@ -235,35 +259,16 @@ const VendorRegisterPage = () => {
             </div>
           </div>
 
-          <div className="form-submit">
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? 'Registering...' : 'Register'}
-            </button>
-          </div>
-        </form>
-      </div>
-      
-      {/* Notification */}
-      {notification && (
-        <div className={`notification ${notification.type}`}>
-          <div className="notification-content">
-            <FontAwesomeIcon 
-              icon={
-                notification.type === 'success' ? faCheckCircle : 
-                notification.type === 'error' ? faExclamationCircle : 
-                faInfoCircle
-              } 
-            />
-            <p>{notification.message}</p>
-          </div>
-          <button 
-            className="notification-close"
-            onClick={() => setNotification(null)}
-          >
-            <FontAwesomeIcon icon={faTimes} />
+          <button type="submit" className="register-button" disabled={loading}>
+            {loading ? 'Creating Account...' : 'Create Vendor Account'}
           </button>
+        </form>
+
+        <div className="register-footer">
+          <p>Already have a vendor account?</p>
+          <Link to="/vendor-login" className="login-link">Login here</Link>
         </div>
-      )}
+      </div>
     </div>
   );
 };

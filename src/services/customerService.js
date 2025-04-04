@@ -1,3 +1,8 @@
+import axios from 'axios';
+import { saveUserToCollection } from '../utils/dbSync';
+
+const API_URL = 'http://localhost:5001/api';
+
 // Dummy customer data
 const DUMMY_CUSTOMERS = [
   {
@@ -65,78 +70,249 @@ export const getCustomerInfo = () => {
   return customerInfo ? JSON.parse(customerInfo) : null;
 };
 
-// Customer login
-export const loginCustomer = async (email, password) => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-
-  const customers = getCustomers();
-  const customer = customers.find(c => c.email === email && c.password === password);
-
-  if (!customer) {
-    throw new Error('Invalid credentials');
-  }
-
-  // Create a copy without the password
-  const { password: _, ...customerData } = customer;
-  const token = btoa(customer.id); // Simple token generation
-
-  // Store customer token and info
-  localStorage.setItem('customerToken', token);
-  localStorage.setItem('customerInfo', JSON.stringify(customerData));
-
-  return { token, customer: customerData };
-};
-
 // Register new customer
 export const registerCustomer = async (customerData) => {
-  // Input validation
-  if (!customerData.email || !customerData.password || !customerData.name) {
-    throw new Error('Please fill in all required fields');
-  }
-
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-
-  // Get existing customers
-  const customers = getCustomers();
-
-  // Check if email already exists
-  if (customers.find(c => c.email === customerData.email)) {
-    throw new Error('Email already registered');
-  }
-
-  // Create new customer object
-  const newCustomer = {
-    id: 'c' + Date.now(),
-    email: customerData.email,
-    password: customerData.password,
-    name: customerData.name,
-    phone: customerData.phone || '',
-    address: customerData.address || '',
-    city: customerData.city || '',
-    state: customerData.state || '',
-    zipCode: customerData.zipCode || '',
-    orders: []
-  };
-
   try {
-    // Add new customer to the list
-    customers.push(newCustomer);
+    // Make sure we have the userType field properly set
+    const dataWithUserType = {
+      ...customerData,
+      userType: 'customer',
+      registrationDate: new Date().toISOString(),
+      isActive: true
+    };
     
-    // Save updated customers list
-    saveCustomers(customers);
-
-    // Return success without sensitive data
-    const { password, ...customerWithoutPassword } = newCustomer;
-    return customerWithoutPassword;
+    console.log('Registering customer with data:', dataWithUserType);
+    
+    // Call the API to register the customer
+    const response = await axios.post(`${API_URL}/auth/register`, dataWithUserType);
+    
+    if (response.data && response.data.user) {
+      // Save the token if provided
+      if (response.data.token) {
+        localStorage.setItem('customerToken', response.data.token);
+        sessionStorage.setItem('customerToken', response.data.token);
+      }
+      
+      // Save user info
+      const userInfo = response.data.user;
+      localStorage.setItem('customerInfo', JSON.stringify(userInfo));
+      sessionStorage.setItem('customerInfo', JSON.stringify(userInfo));
+      
+      // Save user data to collection using our sync utility
+      await saveUserToCollection(response.data.user, 'customer');
+      console.log('Customer registered successfully:', response.data.user.email);
+    }
+    
+    return response.data;
   } catch (error) {
-    throw new Error('Failed to register customer. Please try again.');
+    console.error('Customer registration API error:', error);
+    
+    if (error.response && error.response.data && error.response.data.error) {
+      throw new Error(error.response.data.error);
+    } else {
+      throw new Error('Registration failed: ' + (error.message || 'Unknown error'));
+    }
+  }
+};
+
+// Login customer
+export const loginCustomer = async (email, password) => {
+  try {
+    // Get device info for tracking
+    const deviceInfo = {
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      screenSize: `${window.screen.width}x${window.screen.height}`
+    };
+    
+    console.log('Logging in customer with:', { email, userType: 'customer' });
+    
+    // Call the API for authentication
+    const response = await axios.post(`${API_URL}/auth/login`, { 
+      email, 
+      password,
+      userType: 'customer',
+      deviceInfo
+    });
+    
+    const { token, user, sessionId } = response.data;
+    
+    // Enhance user object with any additional data needed for the application
+    const enhancedUser = {
+      ...user,
+      lastLogin: new Date().toISOString(),
+      sessionId: sessionId
+    };
+    
+    // Store token and user info in localStorage for persistence
+    localStorage.setItem('customerToken', token);
+    localStorage.setItem('customerInfo', JSON.stringify(enhancedUser));
+    
+    // Also store in sessionStorage for quicker access
+    sessionStorage.setItem('customerToken', token);
+    sessionStorage.setItem('customerInfo', JSON.stringify(enhancedUser));
+    
+    // Save user data to collection using our sync utility
+    await saveUserToCollection(enhancedUser, 'customer');
+    console.log('Customer login successful:', enhancedUser.email);
+    
+    return { token, customer: enhancedUser, sessionId };
+  } catch (error) {
+    console.error('Customer login error:', error);
+    throw new Error(error.response?.data?.error || 'Login failed: ' + (error.message || 'Unknown error'));
+  }
+};
+
+// Get customer's wishlist
+export const getCustomerWishlist = async () => {
+  try {
+    const token = sessionStorage.getItem('customerToken');
+    const customerInfo = JSON.parse(sessionStorage.getItem('customerInfo'));
+    
+    if (!token || !customerInfo) {
+      throw new Error('Not authenticated');
+    }
+
+    const response = await axios.get(`${API_URL}/customers/wishlist`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.error || 'Failed to fetch wishlist');
+  }
+};
+
+// Add product to wishlist
+export const addToWishlist = async (productId) => {
+  try {
+    const token = sessionStorage.getItem('customerToken');
+    const response = await axios.post(`${API_URL}/customers/wishlist/${productId}`, {}, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.error || 'Failed to add to wishlist');
+  }
+};
+
+// Remove product from wishlist
+export const removeFromWishlist = async (productId) => {
+  try {
+    const token = sessionStorage.getItem('customerToken');
+    const response = await axios.delete(`${API_URL}/customers/wishlist/${productId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.error || 'Failed to remove from wishlist');
   }
 };
 
 // Customer logout
-export const logoutCustomer = () => {
-  localStorage.removeItem('customerToken');
-  localStorage.removeItem('customerInfo');
+export const logoutCustomer = async () => {
+  try {
+    // Get the token
+    const token = sessionStorage.getItem('customerToken');
+    
+    if (token) {
+      // Call the logout API endpoint to properly end the session
+      await axios.post(`${API_URL}/auth/logout`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      console.log('Customer logged out successfully');
+    }
+  } catch (error) {
+    console.error('Error logging out customer:', error);
+    // Continue with local logout even if API call fails
+  } finally {
+    // Always clear local storage regardless of API success
+    sessionStorage.removeItem('customerToken');
+    sessionStorage.removeItem('customerInfo');
+    localStorage.removeItem('customerToken');
+    localStorage.removeItem('customerInfo');
+    
+    // Dispatch logout event
+    window.dispatchEvent(new Event('customerLogout'));
+  }
+};
+
+// Logout from all devices
+export const logoutFromAllDevices = async () => {
+  try {
+    // Get the token
+    const token = sessionStorage.getItem('customerToken');
+    
+    if (token) {
+      // Call the logout-all API endpoint to end all sessions
+      await axios.post(`${API_URL}/auth/logout-all`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      console.log('Customer logged out from all devices');
+    }
+  } catch (error) {
+    console.error('Error logging out from all devices:', error);
+    throw new Error(error.response?.data?.error || 'Failed to logout from all devices');
+  } finally {
+    // Clear local storage
+    sessionStorage.removeItem('customerToken');
+    sessionStorage.removeItem('customerInfo');
+    localStorage.removeItem('customerToken');
+    localStorage.removeItem('customerInfo');
+    
+    // Dispatch logout event
+    window.dispatchEvent(new Event('customerLogout'));
+  }
+};
+
+// Get customer's active sessions
+export const getCustomerSessions = async () => {
+  try {
+    const token = sessionStorage.getItem('customerToken');
+    
+    if (!token) {
+      throw new Error('Not authenticated');
+    }
+    
+    const response = await axios.get(`${API_URL}/auth/sessions`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    
+    return response.data.sessions;
+  } catch (error) {
+    console.error('Error fetching customer sessions:', error);
+    throw new Error(error.response?.data?.error || 'Failed to fetch sessions');
+  }
+};
+
+// Store customer session data
+export const storeSessionData = async (sessionData) => {
+  try {
+    const token = sessionStorage.getItem('customerToken');
+    const customerInfo = JSON.parse(sessionStorage.getItem('customerInfo'));
+    
+    if (!token || !customerInfo) {
+      throw new Error('Not authenticated');
+    }
+    
+    // Extract the sessionId from the customerInfo
+    const { currentSessionId } = customerInfo;
+    
+    if (!currentSessionId) {
+      throw new Error('No active session ID found');
+    }
+    
+    const response = await axios.post(`${API_URL}/auth/session`, {
+      sessionId: currentSessionId,
+      sessionData
+    }, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error storing session data:', error);
+    throw new Error(error.response?.data?.error || 'Failed to store session data');
+  }
 }; 

@@ -51,14 +51,31 @@ const RegisterPage = () => {
     try {
       // Remove confirmPassword from the data sent to registration
       const { confirmPassword, ...registrationData } = formData;
-      const result = await registerCustomer(registrationData);
       
-      if (result) {
-        // Show success message (optional)
+      // Add user type and registration date
+      const userData = {
+        ...registrationData,
+        userType: 'customer',
+        registrationDate: new Date().toISOString(),
+        active: true
+      };
+      
+      console.log('Registering customer with data:', userData);
+      
+      // Save to database through API
+      const result = await registerCustomer(userData);
+      
+      console.log('Registration response:', result);
+      
+      if (result && result.user) {
+        // Show success message
         alert('Registration successful! Please login.');
         navigate('/login');
+      } else {
+        throw new Error('Registration failed: No user data returned');
       }
     } catch (err) {
+      console.error('Registration error:', err);
       setError(err.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);

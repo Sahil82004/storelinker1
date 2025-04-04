@@ -1,11 +1,62 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faStar, faStarHalfAlt, faChevronLeft, faChevronRight } from '@fortawesome/free-solid-svg-icons';
+import { 
+  faStar, 
+  faStarHalfAlt, 
+  faChevronLeft, 
+  faChevronRight,
+  faLocationDot,
+  faStore
+} from '@fortawesome/free-solid-svg-icons';
 import { faStar as farStar } from '@fortawesome/free-regular-svg-icons';
 import '../../assets/css/HomePage.css';
 
 const HomePage = () => {
+  const [stores, setStores] = useState([]);
+
+  useEffect(() => {
+    // Fetch stores from localStorage
+    const fetchStores = () => {
+      try {
+        const storedStores = JSON.parse(localStorage.getItem('registeredStores')) || [];
+        
+        // Fix any stores with object addresses
+        const fixedStores = storedStores.map(store => {
+          if (typeof store.address === 'object') {
+            return {
+              ...store,
+              address: `${store.address.street || ''}, ${store.address.city || ''}, ${store.address.state || ''}`.replace(/^, /, '').replace(/, $/, ''),
+              city: store.city || (store.address && store.address.city) || '',
+              state: store.state || (store.address && store.address.state) || ''
+            };
+          }
+          return store;
+        });
+        
+        // Save fixed stores back to localStorage
+        if (JSON.stringify(fixedStores) !== JSON.stringify(storedStores)) {
+          localStorage.setItem('registeredStores', JSON.stringify(fixedStores));
+          console.log('Fixed store address formats in localStorage');
+        }
+        
+        setStores(fixedStores);
+      } catch (error) {
+        console.error('Error loading stores:', error);
+        setStores([]);
+      }
+    };
+
+    fetchStores();
+
+    // Listen for store registration updates
+    window.addEventListener('storeRegistered', fetchStores);
+
+    return () => {
+      window.removeEventListener('storeRegistered', fetchStores);
+    };
+  }, []);
+
   return (
     <>
       {/* Hero Section */}
@@ -99,6 +150,53 @@ const HomePage = () => {
                 </Link>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Featured Stores */}
+      <section className="featured-stores">
+        <div className="container">
+          <div className="section-header">
+            <h2>Featured Stores</h2>
+            <Link to="/stores" className="view-all">View All Stores</Link>
+          </div>
+          
+          <div className="stores-grid">
+            {stores.map((store) => (
+              <div key={store.id} className="store-card">
+                <div className="store-field">
+                  <label>Store Name:</label>
+                  <div className="field-value">{store.storeName}</div>
+                </div>
+                <div className="store-field">
+                  <label>Address:</label>
+                  <div className="field-value">
+                    {typeof store.address === 'object' 
+                      ? `${store.address.street || ''}, ${store.address.city || ''}`
+                      : store.address || 'No address provided'}
+                  </div>
+                </div>
+                <div className="store-field">
+                  <label>Location:</label>
+                  <div className="field-value">
+                    {store.city || (store.address && store.address.city) || ''}, 
+                    {store.state || (store.address && store.address.state) || ''}
+                  </div>
+                </div>
+                <Link to={`/store/${store.id}`} className="btn-visit">
+                  Visit Store
+                </Link>
+              </div>
+            ))}
+            {stores.length === 0 && (
+              <div className="no-stores-message">
+                <p>No stores registered yet.</p>
+                <Link to="/vendor-register" className="btn-register">
+                  Register Your Store
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </section>

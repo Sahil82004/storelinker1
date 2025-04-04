@@ -24,10 +24,14 @@ const AddProductPage = () => {
     discountType: 'percentage',
     discountValue: '',
     discountStart: '',
-    discountEnd: ''
+    discountEnd: '',
+    imageUrl: '',
+    image: ''
   });
   
   const [images, setImages] = useState([]);
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const [imageUrl, setImageUrl] = useState('');
 
   useEffect(() => {
     // Check if vendor is logged in
@@ -70,55 +74,146 @@ const AddProductPage = () => {
     setImages(prevImages => prevImages.filter(image => image.id !== id));
   };
   
+  // Error handling helper
+  const handleError = (err) => {
+    console.error('Error details:', err);
+    
+    // Set a user-friendly error message
+    if (err.message && err.message.includes('Server error')) {
+      setError('Server error: Unable to connect to the product database. Please try again later or contact support.');
+    } else if (err.message && err.message.includes('Not authenticated')) {
+      setError('Authentication error: Your session may have expired. Please log in again.');
+      setTimeout(() => {
+        navigate('/vendor-login');
+      }, 3000);
+    } else {
+      setError(err.message || 'Failed to add product. Please check your inputs and try again.');
+    }
+  };
+  
+  // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    
+
     try {
-      // Calculate discount price if applicable
-      let discountPrice = null;
-      if (formData.applyDiscount && formData.discountValue) {
-        if (formData.discountType === 'percentage') {
-          const discountPercentage = parseFloat(formData.discountValue) / 100;
-          discountPrice = parseFloat(formData.price) * (1 - discountPercentage);
-        } else {
-          discountPrice = parseFloat(formData.price) - parseFloat(formData.discountValue);
-        }
-        // Ensure discount price is not negative
-        discountPrice = Math.max(0, discountPrice);
+      // Validate required fields
+      if (!formData.name || !formData.price || !formData.category) {
+        setError("Please fill in all required fields");
+        setLoading(false);
+        return;
       }
+
+      // Get vendor info - verify it's available
+      const vendorInfo = getVendorInfo();
+      if (!vendorInfo) {
+        setError("Authentication error: Vendor information not available. Please log in again.");
+        setTimeout(() => navigate('/vendor-login'), 2000);
+        setLoading(false);
+        return;
+      }
+
+      // Fix the image URL handling
+      let imageUrl = '';
+      if (formData.imageUrl) {
+        imageUrl = formData.imageUrl;
+      } else if (images.length > 0) {
+        if (images[0].preview && images[0].preview.startsWith('http')) {
+          imageUrl = images[0].preview;
+        } else {
+          imageUrl = 'https://via.placeholder.com/500x500?text=Product+Image';
+        }
+      } else {
+        imageUrl = 'https://via.placeholder.com/500x500?text=Product+Image';
+      }
+
+      // Generate a temporary ID for immediate display
+      const tempId = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       
-      // Prepare product data
+      // Prepare product data with all required fields
       const productData = {
-        name: formData.name,
-        description: formData.description,
+        name: formData.name.trim(),
+        description: formData.description.trim() || `${formData.name.trim()} - Quality product`,
         price: parseFloat(formData.price),
-        discountPrice: discountPrice,
-        stock: parseInt(formData.stock),
-        sku: formData.sku,
+        originalPrice: parseFloat(formData.originalPrice || formData.price),
         category: formData.category,
-        // Use the first image as the main image or a placeholder
-        image: images.length > 0 ? images[0].preview : 'https://via.placeholder.com/300',
-        vendor: vendorInfo?.storeName || 'Unknown Vendor',
-        vendorId: vendorInfo?.id
+        imageUrl: imageUrl,
+        image: imageUrl,
+        stock: parseInt(formData.stock || 10),
+        vendorId: vendorInfo._id,
+        vendorName: vendorInfo.storeName || vendorInfo.name,
+        status: 'active',
+        id: tempId,
+        _id: tempId
       };
-      
-      // Add product using vendor service
-      const newProduct = await addProduct(productData);
-      
-      // Dispatch event to notify other components
-      window.dispatchEvent(new CustomEvent('productUpdated', { detail: newProduct }));
-      
+
+      // Save to localStorage as backup
+      try {
+        const existingProducts = JSON.parse(localStorage.getItem('vendorProducts') || '[]');
+        const updatedProducts = [productData, ...existingProducts].slice(0, 20); // Keep last 20 products
+        localStorage.setItem('vendorProducts', JSON.stringify(updatedProducts));
+      } catch (storageError) {
+        console.error('Error saving to localStorage:', storageError);
+      }
+
+      // Save in sessionStorage for immediate display
+      try {
+        sessionStorage.setItem('recentlyAddedProduct', JSON.stringify(productData));
+        
+        // Dispatch event for real-time update
+        window.dispatchEvent(new CustomEvent('productUpdated', {
+          detail: productData
+        }));
+      } catch (storageError) {
+        console.error('Error storing product in sessionStorage:', storageError);
+      }
+
+      // Set success and redirect
       setSuccess(true);
       
-      // Redirect to dashboard after a short delay
+      // Call the API in the background
+      addProduct(productData)
+        .then(savedProduct => {
+          console.log('Product saved successfully in API:', savedProduct);
+          
+          // Update localStorage with the actual product data from API
+          try {
+            const existingProducts = JSON.parse(localStorage.getItem('vendorProducts') || '[]');
+            const updatedProducts = existingProducts.map(p => 
+              p._id === tempId ? savedProduct : p
+            );
+            localStorage.setItem('vendorProducts', JSON.stringify(updatedProducts));
+            
+            // Update sessionStorage with the actual product data
+            sessionStorage.setItem('recentlyAddedProduct', JSON.stringify(savedProduct));
+            
+            // Dispatch event with updated data
+            window.dispatchEvent(new CustomEvent('productUpdated', {
+              detail: savedProduct
+            }));
+          } catch (storageError) {
+            console.error('Error updating product in storage:', storageError);
+          }
+        })
+        .catch(apiError => {
+          console.error('API error (product will remain in UI but may not be saved permanently):', apiError);
+        });
+
+      // Redirect after visual feedback
       setTimeout(() => {
         navigate('/vendor-dashboard');
       }, 1500);
-    } catch (err) {
-      setError(err.message || 'Failed to add product. Please try again.');
-    } finally {
+    } catch (error) {
+      console.error('Failed to save product:', error);
+      if (error.message && error.message.includes('authentication')) {
+        setError("Authentication error. Please log in again.");
+        setTimeout(() => navigate('/vendor-login'), 2000);
+      } else if (error.response && error.response.status === 500) {
+        setError("Server error. Please try again later.");
+      } else {
+        setError(error.message || 'Failed to save product. Please try again.');
+      }
       setLoading(false);
     }
   };
@@ -336,25 +431,68 @@ const AddProductPage = () => {
               
               <div className="form-group-full">
                 <label className="form-label">Product Images</label>
-                <div 
-                  className="upload-area" 
-                  id="upload-area"
-                  onClick={() => document.getElementById('file-input').click()}
-                >
-                  <div className="upload-icon">
-                    <FontAwesomeIcon icon={faCloudUploadAlt} />
-                  </div>
-                  <div className="upload-text">Drag & drop product images here</div>
-                  <div className="upload-hint">or click to browse (Max 5 images, JPG, PNG or GIF)</div>
+                <div className="image-upload-tabs">
+                  <button 
+                    type="button"
+                    className={`tab-button ${!showUrlInput ? 'active' : ''}`}
+                    onClick={() => setShowUrlInput(false)}
+                  >
+                    File Upload
+                  </button>
+                  <button 
+                    type="button"
+                    className={`tab-button ${showUrlInput ? 'active' : ''}`}
+                    onClick={() => setShowUrlInput(true)}
+                  >
+                    Image URL
+                  </button>
                 </div>
-                <input 
-                  type="file" 
-                  className="hidden-file-input" 
-                  id="file-input" 
-                  multiple 
-                  accept="image/*"
-                  onChange={handleFileUpload}
-                />
+
+                {showUrlInput ? (
+                  <div className="url-input-section">
+                    <input 
+                      type="url" 
+                      className="form-control"
+                      placeholder="Enter image URL (e.g., https://example.com/image.jpg)"
+                      value={imageUrl}
+                      onChange={(e) => {
+                        const url = e.target.value;
+                        setImageUrl(url);
+                        if (url) {
+                          const newImage = {
+                            id: Date.now(),
+                            preview: url
+                          };
+                          setImages(prev => [...prev, newImage].slice(0, 5));
+                        }
+                      }}
+                    />
+                    <p className="url-hint">Enter a valid image URL. Supported formats: JPG, PNG, GIF</p>
+                  </div>
+                ) : (
+                  <>
+                    <div 
+                      className="upload-area" 
+                      id="upload-area"
+                      onClick={() => document.getElementById('file-input').click()}
+                    >
+                      <div className="upload-icon">
+                        <FontAwesomeIcon icon={faCloudUploadAlt} />
+                      </div>
+                      <div className="upload-text">Drag & drop product images here</div>
+                      <div className="upload-hint">or click to browse (Max 5 images, JPG, PNG or GIF)</div>
+                    </div>
+                    <input 
+                      type="file" 
+                      className="hidden-file-input" 
+                      id="file-input" 
+                      multiple 
+                      accept="image/*"
+                      onChange={handleFileUpload}
+                    />
+                  </>
+                )}
+
                 <div className="image-preview-container" id="image-preview-container">
                   {images.map(image => (
                     <div className="image-preview" key={image.id}>

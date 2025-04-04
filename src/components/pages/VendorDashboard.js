@@ -40,11 +40,42 @@ const VendorDashboard = () => {
     // Load products
     fetchProducts();
 
+    // Define event handler function for product updates
+    const handleProductUpdated = (event) => {
+      console.log('Product update event received:', event.detail);
+      if (event.detail && (event.detail._id || event.detail.id)) {
+        // Option 1: Refresh all products (recommended for consistency)
+        fetchProducts();
+        
+        // Option 2: Add the new product to the state directly (faster but may not capture all data)
+        // If needed, this could be used instead:
+        // setProducts(prevProducts => {
+        //   // Check if product already exists (for updates)
+        //   const existingProductIndex = prevProducts.findIndex(p => 
+        //     p._id === (event.detail._id || event.detail.id)
+        //   );
+        //   
+        //   if (existingProductIndex >= 0) {
+        //     // Update existing product
+        //     const updatedProducts = [...prevProducts];
+        //     updatedProducts[existingProductIndex] = event.detail;
+        //     return updatedProducts;
+        //   } else {
+        //     // Add new product
+        //     return [...prevProducts, event.detail];
+        //   }
+        // });
+        
+        // Show success notification
+        showNotification('Product updated successfully', 'success');
+      }
+    };
+
     // Listen for product updates
-    window.addEventListener('productUpdated', fetchProducts);
+    window.addEventListener('productUpdated', handleProductUpdated);
     
     return () => {
-      window.removeEventListener('productUpdated', fetchProducts);
+      window.removeEventListener('productUpdated', handleProductUpdated);
     };
   }, [navigate]);
 
@@ -101,15 +132,24 @@ const VendorDashboard = () => {
     <div className="vendor-dashboard">
       <header className="dashboard-header">
         <div className="vendor-info">
-          <FontAwesomeIcon icon={faStore} className="store-icon" />
+         <FontAwesomeIcon icon="fa-solid fa-store" />
           <div className="vendor-details">
             <h1>{vendorInfo?.storeName || 'Vendor Dashboard'}</h1>
             <p>{vendorInfo?.email}</p>
           </div>
         </div>
-        <button className="logout-button" onClick={handleLogout}>
-          <FontAwesomeIcon icon={faSignOutAlt} /> Logout
-        </button>
+        <div className="dashboard-actions">
+          <Link 
+            to={`/stores/${vendorInfo?._id}`} 
+            className="visit-store-button"
+            title="View your store as customers see it"
+          >
+            <FontAwesomeIcon icon={faStore} /> Visit Store
+          </Link>
+          <button className="logout-button" onClick={handleLogout}>
+            <FontAwesomeIcon icon={faSignOutAlt} /> Logout
+          </button>
+        </div>
       </header>
 
       {notification.show && (
@@ -172,7 +212,14 @@ const VendorDashboard = () => {
             filteredProducts.map(product => (
               <div key={product._id} className="product-card">
                 <div className="product-image">
-                  <img src={product.image} alt={product.name} />
+                  <img 
+                    src={product.image || product.imageUrl || 'https://via.placeholder.com/300'} 
+                    alt={product.name}
+                    onError={(e) => {
+                      console.log('Image failed to load:', product.image || product.imageUrl);
+                      e.target.src = 'https://via.placeholder.com/300';
+                    }}
+                  />
                 </div>
                 <div className="product-details">
                   <h3>{product.name}</h3>

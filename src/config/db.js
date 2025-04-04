@@ -2,7 +2,7 @@ const { MongoClient, ServerApiVersion } = require('mongodb');
 require('dotenv').config();
 
 // Get MongoDB URI from environment variables
-const uri = process.env.MONGODB_URI || "mongodb+srv://sahil:sahil123@storelinker.btnxy.mongodb.net/?retryWrites=true&w=majority&appName=STORELINKER";
+const uri = process.env.MONGODB_URI || "mongodb+srv://admin:admin123@storelinker.2jfyw.mongodb.net/Storelinker?retryWrites=true&w=majority&appName=STORELINKER";
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {

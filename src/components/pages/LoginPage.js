@@ -29,11 +29,14 @@ const LoginPage = () => {
     setError('');
 
     try {
-      // Login with customer service
+      console.log('Attempting to login with:', { email, password, userType: 'customer' });
+      
+      // Explicitly pass userType as 'customer'
       const result = await loginCustomer(email, password);
       
       // Store user data in auth service
       if (result && result.customer) {
+        console.log('Login successful, storing customer data');
         login(result.customer);
         
         // Check if there's a redirect URL stored
@@ -44,9 +47,12 @@ const LoginPage = () => {
         } else {
           navigate('/');
         }
+      } else {
+        throw new Error('Login successful but user data is missing');
       }
     } catch (err) {
-      setError(err.message || 'Invalid email or password');
+      console.error('Login error:', err);
+      setError(err.message || 'Invalid email or password. Please try again.');
     } finally {
       setLoading(false);
     }

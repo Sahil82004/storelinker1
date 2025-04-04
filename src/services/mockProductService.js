@@ -184,6 +184,42 @@ const mockProducts = [
   },
 
   {
+    "id": 20,
+    "name": "moto g53",
+    "description": "Track your health metrics and workouts with this waterproof smartwatch. Monitor heart rate, sleep quality, steps, and more. Connect to your smartphone for notifications and app integration.",
+    "price": 18999,
+    "discountPrice": null,
+    "rating": 4.2,
+    "reviewCount": 95,
+    "images": [
+        "https://m.media-amazon.com/images/I/41rtba7S2-L.jpg"
+    ],
+    "store": {
+        "name": "FitGear",
+        "rating": 4.5,
+        "location": "Delhi, India",
+        "responseTime": "1 hour"
+    },
+    "category": "electronics",
+    "stock": 32,
+    "features": [
+        "Heart rate monitoring",
+        "Sleep tracking",
+        "Water resistant (50m)",
+        "GPS tracking",
+        "7-day battery life"
+    ],
+    "specifications": {
+        "Brand": "FitGear",
+        "Model": "FG-SW100",
+        "Color": "Black/Silver",
+        "Display": "1.3\" AMOLED",
+        "Battery Life": "7 days",
+        "Weight": "45g"
+    }
+},
+
+  {
     id: 402,
     name: 'Wireless Headphones with Microphone',
     description: 'Premium wireless headphones with active noise cancellation and built-in microphone. Perfect for music, podcasts, virtual meetings, and calls. Enjoy up to 25 hours of playtime with quick charging capability.',

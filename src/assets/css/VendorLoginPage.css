@@ -124,4 +124,26 @@
   .login-container {
     padding: 30px 20px;
   }
+}
+
+.mock-login-section {
+  margin-top: 25px;
+  padding-top: 20px;
+  border-top: 1px solid #eaeaea;
+}
+
+.mock-login-button {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 15px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  margin-top: 10px;
+}
+
+.mock-login-button:hover {
+  background-color: #218838;
 } 

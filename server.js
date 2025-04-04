@@ -1,32 +1,69 @@
 const express = require('express');
-const { MongoClient, ObjectId } = require('mongodb');
+const mongoose = require('mongoose');
 const cors = require('cors');
-const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-require('dotenv').config();
+const dotenv = require('dotenv');
+
+// Load environment variables
+dotenv.config();
 
 const app = express();
-const port = process.env.PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const port = process.env.PORT || 5001;
+const JWT_SECRET = process.env.JWT_SECRET || 'd238d1ca75ce5287a55831d555d73ab170c193c3a6c21da43539c2732445131e3f3a2a8eadb41b3b71186fe308a0fa293b490e81bdd17b66a3b638fdd20e27eb';
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// MongoDB Connection URL
-const uri = "mongodb+srv://sahil:sahil123@storelinker.btnxy.mongodb.net/?retryWrites=true&w=majority&appName=STORELINKER";
-const client = new MongoClient(uri);
+// MongoDB Connection
+const MONGODB_URI = 'mongodb+srv://admin:admin123@storelinker.eqk7l.mongodb.net/?retryWrites=true&w=majority&appName=Storelinker';
 
-async function connectDB() {
+// MongoDB Connection Options
+const mongooseOptions = {
+  dbName: 'Storelinker',
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
+  family: 4
+};
+
+// Connect to MongoDB
+mongoose.connect(MONGODB_URI, mongooseOptions)
+.then(async () => {
+  console.log('Connected to MongoDB Atlas - Storelinker Database');
+  
   try {
-    await client.connect();
-    console.log('Connected to MongoDB');
-  } catch (error) {
-    console.error('Error connecting to MongoDB:', error);
+    // Create indexes for all collections
+    await Promise.all([
+      mongoose.connection.db.collection('users').createIndex({ email: 1 }, { unique: true }),
+      mongoose.connection.db.collection('products').createIndex({ vendorId: 1 }),
+      mongoose.connection.db.collection('stores').createIndex({ vendorId: 1 })
+    ]);
+    console.log('Database indexes created successfully for users, products, and stores collections');
+    
+    // Fix any customer records with storeName values
+    const { User } = require('./models/User');
+    const fixedCount = await User.fixCustomerStoreNames();
+    if (fixedCount > 0) {
+      console.log(`Fixed ${fixedCount} customer accounts with incorrect storeName values`);
+    }
+  } catch (indexError) {
+    console.error('Error creating indexes or fixing customer records:', indexError);
   }
-}
+})
+.catch(err => {
+  console.error('MongoDB connection error:', err);
+  process.exit(1);
+});
 
-connectDB();
+// Handle MongoDB connection errors after initial connection
+mongoose.connection.on('error', err => {
+  console.error('MongoDB connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('MongoDB disconnected. Attempting to reconnect...');
+  mongoose.connect(MONGODB_URI, mongooseOptions);
+});
 
 // Authentication Middleware
 const authenticateToken = (req, res, next) => {
@@ -34,331 +71,61 @@ const authenticateToken = (req, res, next) => {
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
-    return res.status(401).json({ error: 'Access denied' });
+    return res.status(401).json({ message: 'Authentication token required' });
   }
 
-  try {
-    const verified = jwt.verify(token, JWT_SECRET);
-    req.user = verified;
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ message: 'Invalid or expired token' });
+    }
+    req.user = user;
     next();
-  } catch (error) {
-    res.status(400).json({ error: 'Invalid token' });
-  }
+  });
 };
 
-// Auth Routes
-app.post('/api/auth/register', async (req, res) => {
+// Routes
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/vendors', require('./routes/vendors'));
+app.use('/api/products', require('./routes/products'));
+app.use('/api/stores', require('./routes/stores'));
+
+// Add route for user sessions - can access session data without affecting auth routes
+const { UserSession } = require('./models/User');
+app.get('/api/sessions/stats', async (req, res) => {
   try {
-    const { email, password, name, userType } = req.body;
-    const database = client.db('storelinker');
-    const users = database.collection('users');
-
-    // Check if user exists
-    const existingUser = await users.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ error: 'User already exists' });
-    }
-
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Create user
-    const user = {
-      email,
-      password: hashedPassword,
-      name,
-      userType, // 'vendor' or 'customer'
-      createdAt: new Date(),
-    };
-
-    const result = await users.insertOne(user);
-    const userId = result.insertedId;
-
-    // Create token
-    const token = jwt.sign(
-      { id: userId.toString(), email: user.email, userType: user.userType },
-      JWT_SECRET
-    );
-
-    res.json({ token, user: { email, name, userType } });
-  } catch (error) {
-    console.error('Error in registration:', error);
-    res.status(500).json({ error: 'Registration failed' });
-  }
-});
-
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    const database = client.db('storelinker');
-    const users = database.collection('users');
-
-    // Check if user exists
-    const user = await users.findOne({ email });
-    if (!user) {
-      return res.status(400).json({ error: 'User not found' });
-    }
-
-    // Validate password
-    const validPassword = await bcrypt.compare(password, user.password);
-    if (!validPassword) {
-      return res.status(400).json({ error: 'Invalid password' });
-    }
-
-    // Create token with string ID
-    const token = jwt.sign(
-      { id: user._id.toString(), email: user.email, userType: user.userType },
-      JWT_SECRET
-    );
-
+    const totalSessions = await UserSession.countDocuments();
+    const activeSessions = await UserSession.countDocuments({ active: true });
+    const userCounts = await UserSession.aggregate([
+      { $group: { _id: "$userId", count: { $sum: 1 } } },
+      { $count: "uniqueUsers" }
+    ]);
+    
     res.json({
-      token,
-      user: {
-        email: user.email,
-        name: user.name,
-        userType: user.userType,
-      },
+      totalSessions,
+      activeSessions,
+      uniqueUsers: userCounts.length > 0 ? userCounts[0].uniqueUsers : 0
     });
   } catch (error) {
-    console.error('Error in login:', error);
-    res.status(500).json({ error: 'Login failed' });
+    console.error('Error getting session stats:', error);
+    res.status(500).json({ error: 'Error fetching session statistics' });
   }
 });
 
-// Product Routes
-app.get('/api/products', async (req, res) => {
-  try {
-    const database = client.db('storelinker');
-    const products = database.collection('products');
-    const result = await products.find({}).toArray();
-    res.json(result);
-  } catch (error) {
-    console.error('Error fetching products:', error);
-    res.status(500).json({ error: 'Failed to fetch products' });
-  }
-});
-
-// Vendor Product Routes (Protected)
-app.get('/api/vendor/products', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.userType !== 'vendor') {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const database = client.db('storelinker');
-    const products = database.collection('products');
-    
-    console.log('Fetching products for vendor ID:', req.user.id);
-    
-    const result = await products.find({ 
-      vendorId: req.user.id 
-    }).toArray();
-    
-    console.log('Found products:', result);
-    res.json(result);
-  } catch (error) {
-    console.error('Error fetching vendor products:', error);
-    res.status(500).json({ error: 'Failed to fetch vendor products' });
-  }
-});
-
-app.post('/api/vendor/products', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.userType !== 'vendor') {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const database = client.db('storelinker');
-    const products = database.collection('products');
-    
-    // Add additional fields to the product data
-    const productData = {
-      ...req.body,
-      vendorId: req.user.id,
-      createdAt: new Date(),
-      reviewCount: 0,
-      rating: 0,
-      discount: Math.round(((req.body.originalPrice - req.body.price) / req.body.originalPrice) * 100),
-      store: {
-        name: req.user.name || 'Store',
-        rating: 0,
-        reviewCount: 0
-      }
-    };
-
-    console.log('Creating product with data:', productData);
-    const result = await products.insertOne(productData);
-    const insertedProduct = { ...productData, _id: result.insertedId };
-    res.json(insertedProduct);
-  } catch (error) {
-    console.error('Error creating product:', error);
-    res.status(500).json({ error: 'Failed to create product' });
-  }
-});
-
-app.put('/api/vendor/products/:id', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.userType !== 'vendor') {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const database = client.db('storelinker');
-    const products = database.collection('products');
-    
-    const result = await products.updateOne(
-      { _id: new ObjectId(req.params.id), vendorId: req.user.id },
-      { $set: req.body }
-    );
-
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ error: 'Product not found or unauthorized' });
-    }
-
-    res.json({ message: 'Product updated successfully' });
-  } catch (error) {
-    console.error('Error updating product:', error);
-    res.status(500).json({ error: 'Failed to update product' });
-  }
-});
-
-app.delete('/api/vendor/products/:id', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.userType !== 'vendor') {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const database = client.db('storelinker');
-    const products = database.collection('products');
-    
-    const result = await products.deleteOne({
-      _id: new ObjectId(req.params.id),
-      vendorId: req.user.id
-    });
-
-    if (result.deletedCount === 0) {
-      return res.status(404).json({ error: 'Product not found or unauthorized' });
-    }
-
-    res.json({ message: 'Product deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting product:', error);
-    res.status(500).json({ error: 'Failed to delete product' });
-  }
-});
-
-// Category Routes
-app.get('/api/categories', async (req, res) => {
-  try {
-    const database = client.db('storelinker');
-    const products = database.collection('products');
-    const categories = await products.distinct('category');
-    res.json(categories);
-  } catch (error) {
-    console.error('Error fetching categories:', error);
-    res.status(500).json({ error: 'Failed to fetch categories' });
-  }
-});
-
-app.get('/api/products/category/:category', async (req, res) => {
-  try {
-    const database = client.db('storelinker');
-    const products = database.collection('products');
-    const result = await products.find({ category: req.params.category }).toArray();
-    res.json(result);
-  } catch (error) {
-    console.error('Error fetching products by category:', error);
-    res.status(500).json({ error: 'Failed to fetch products by category' });
-  }
-});
-
-// Offers Routes
-app.get('/api/offers', async (req, res) => {
-  try {
-    const database = client.db('storelinker');
-    const offers = database.collection('offers');
-    const result = await offers.find({}).toArray();
-    res.json(result);
-  } catch (error) {
-    console.error('Error fetching offers:', error);
-    res.status(500).json({ error: 'Failed to fetch offers' });
-  }
-});
-
-app.post('/api/offers', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.userType !== 'vendor') {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const database = client.db('storelinker');
-    const offers = database.collection('offers');
-    
-    const offerData = {
-      ...req.body,
-      vendorId: req.user.id,
-      createdAt: new Date(),
-    };
-
-    const result = await offers.insertOne(offerData);
-    res.json({ ...offerData, _id: result.insertedId });
-  } catch (error) {
-    console.error('Error creating offer:', error);
-    res.status(500).json({ error: 'Failed to create offer' });
-  }
-});
-
-app.put('/api/offers/:id', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.userType !== 'vendor') {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const database = client.db('storelinker');
-    const offers = database.collection('offers');
-    
-    const result = await offers.updateOne(
-      { _id: new ObjectId(req.params.id), vendorId: req.user.id },
-      { $set: req.body }
-    );
-
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ error: 'Offer not found or unauthorized' });
-    }
-
-    res.json({ message: 'Offer updated successfully' });
-  } catch (error) {
-    console.error('Error updating offer:', error);
-    res.status(500).json({ error: 'Failed to update offer' });
-  }
-});
-
-app.delete('/api/offers/:id', authenticateToken, async (req, res) => {
-  try {
-    if (req.user.userType !== 'vendor') {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    const database = client.db('storelinker');
-    const offers = database.collection('offers');
-    
-    const result = await offers.deleteOne({
-      _id: new ObjectId(req.params.id),
-      vendorId: req.user.id
-    });
-
-    if (result.deletedCount === 0) {
-      return res.status(404).json({ error: 'Offer not found or unauthorized' });
-    }
-
-    res.json({ message: 'Offer deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting offer:', error);
-    res.status(500).json({ error: 'Failed to delete offer' });
-  }
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Something went wrong!' });
 });
 
 // Start server
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
+}).on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${port} is already in use. Please use a different port or close the application using this port.`);
+    console.log(`Try running with a different port: $env:PORT=5002; node server.js`);
+  } else {
+    console.error('Error starting server:', err);
+  }
+  process.exit(1);
 }); 

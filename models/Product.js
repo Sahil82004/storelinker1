@@ -6,10 +6,9 @@ const productSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
-  category: {
+  description: {
     type: String,
-    required: true,
-    enum: ['electronics', 'computers', 'fashion', 'appliances', 'furniture']
+    required: true
   },
   price: {
     type: Number,
@@ -18,16 +17,31 @@ const productSchema = new mongoose.Schema({
   },
   originalPrice: {
     type: Number,
-    required: true,
     min: 0
   },
-  description: {
+  discountPrice: {
+    type: Number,
+    min: 0
+  },
+  imageUrl: {
     type: String,
     required: true
   },
-  image: {
+  category: {
     type: String,
-    required: true
+    required: true,
+    validate: {
+      validator: function(v) {
+        return v && v.length > 0;
+      },
+      message: 'Category cannot be empty'
+    }
+  },
+  stock: {
+    type: Number,
+    required: true,
+    min: 0,
+    default: 0
   },
   rating: {
     type: Number,
@@ -37,40 +51,20 @@ const productSchema = new mongoose.Schema({
   },
   reviewCount: {
     type: Number,
-    default: 0
-  },
-  discount: {
-    type: Number,
     default: 0,
-    min: 0,
-    max: 100
+    min: 0
   },
-  vendor: {
+  vendorId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
-  store: {
-    name: String,
-    address: String,
-    rating: Number,
-    contact: String
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
+  isActive: {
+    type: Boolean,
+    default: true
   }
+}, {
+  timestamps: true
 });
 
-// Update the updatedAt timestamp before saving
-productSchema.pre('save', function(next) {
-  this.updatedAt = Date.now();
-  next();
-});
-
-const Product = mongoose.model('Product', productSchema);
-module.exports = Product; 
+module.exports = mongoose.model('products', productSchema); 

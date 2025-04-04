@@ -45,7 +45,7 @@ export default function ProductList() {
 
   const fetchCategories = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/categories');
+      const response = await fetch('http://localhost:5001/api/categories');
       const data = await response.json();
       if (response.ok) {
         setCategories(data);
@@ -58,8 +58,8 @@ export default function ProductList() {
   const fetchProducts = async () => {
     try {
       const url = selectedCategory
-        ? `http://localhost:5000/api/products/category/${selectedCategory}`
-        : 'http://localhost:5000/api/products';
+        ? `http://localhost:5001/api/products/category/${selectedCategory}`
+        : 'http://localhost:5001/api/products';
       
       const response = await fetch(url);
       const data = await response.json();
