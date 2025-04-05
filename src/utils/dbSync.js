@@ -153,4 +153,65 @@ export const initializeSync = () => {
   
   // Also process when coming back online
   window.addEventListener('online', processPendingSyncs);
+};
+
+// Utility function to recover sessions for a specific user
+export const recoverUserSession = async (userId, email) => {
+  try {
+    // Try to get token first
+    const token = localStorage.getItem('vendorToken') || sessionStorage.getItem('vendorToken');
+    
+    if (!token) {
+      console.error('No token available for session recovery');
+      return { success: false, error: 'No authentication token available' };
+    }
+    
+    // Call the recovery endpoint
+    const response = await fetch('http://localhost:5001/api/auth/recover-user-sessions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        userId,
+        email
+      })
+    });
+    
+    const result = await response.json();
+    
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to recover session');
+    }
+    
+    return { success: true, result };
+  } catch (error) {
+    console.error('Session recovery error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// Helper function to ensure a user can log in with local credentials
+export const ensureUserCanLogin = async (email, savedUserInfo) => {
+  try {
+    // If we have saved user info for this email
+    if (savedUserInfo && savedUserInfo.email === email) {
+      // Check if we need to recover session
+      const sessionId = savedUserInfo.sessionId || savedUserInfo.currentSessionId;
+      
+      if (!sessionId) {
+        // Try to recover using the user ID
+        await recoverUserSession(savedUserInfo._id, email);
+        console.log('Session recovery attempted for user:', email);
+      }
+      
+      return { success: true, user: savedUserInfo };
+    }
+    
+    return { success: false, error: 'No saved user information available' };
+  } catch (error) {
+    console.error('Error ensuring user can login:', error);
+    return { success: false, error: error.message };
+  }
 }; 

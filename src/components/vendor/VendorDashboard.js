@@ -44,23 +44,26 @@ const CATEGORIES = [
   'Other',
 ];
 
+// Configure the API base URL - update this to match your actual API URL
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5002';
+
 // Default placeholder image in case the product image fails to load
-const DEFAULT_IMAGE = 'https://placehold.co/300x300/e3f2fd/1a73e8?text=Product';
+const DEFAULT_IMAGE = 'https://via.placeholder.com/300';
 
 // Process image URL to make sure it's valid
 const getValidImageUrl = (product) => {
   if (!product) return DEFAULT_IMAGE;
   
   // Check all possible image properties
-  let imageUrl = product.image || product.imageUrl || '';
+  let url = product.image || product.imageUrl || '';
   
-  // Verify that the URL is not empty and is a valid URL
-  if (imageUrl && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'))) {
-    return imageUrl;
+  // If the URL is empty, return the default image
+  if (!url || url.trim() === '') {
+    return DEFAULT_IMAGE;
   }
-  
-  // If no valid URL is found, return the default image
-  return DEFAULT_IMAGE;
+
+  // Return URLs directly - avoid manipulation that could break them
+  return url;
 };
 
 // Check for newly added products stored in sessionStorage
@@ -69,12 +72,19 @@ const checkForNewProducts = () => {
     const newProductJson = sessionStorage.getItem('recentlyAddedProduct');
     if (newProductJson) {
       console.log('Found recently added product in sessionStorage:', newProductJson);
-      const newProduct = JSON.parse(newProductJson);
+      const parsedData = JSON.parse(newProductJson);
       
-      // Clear it after retrieving to prevent duplication
-      sessionStorage.removeItem('recentlyAddedProduct');
+      // Don't remove it to preserve for future page loads
+      // sessionStorage.removeItem('recentlyAddedProduct');
       
-      return newProduct;
+      // Handle both array and single product formats
+      if (Array.isArray(parsedData)) {
+        // If it's an array, return the most recent product (first item)
+        return parsedData.length > 0 ? parsedData[0] : null;
+      } else {
+        // If it's a single product object, return as is
+        return parsedData;
+      }
     }
   } catch (err) {
     console.error('Error checking for new products:', err);
@@ -138,13 +148,16 @@ export default function VendorDashboard() {
     const handleProductUpdated = (event) => {
       console.log('Product update event received:', event.detail);
       if (event.detail) {
+        // Simply use the original image URL
+        const imageUrl = event.detail.image || event.detail.imageUrl || DEFAULT_IMAGE;
+        
         // Add the new product to the state without refetching everything
         const newProduct = {
           ...event.detail,
           _id: event.detail._id || event.detail.id || `temp_${Date.now()}`,
           id: event.detail.id || event.detail._id || `temp_${Date.now()}`,
-          image: getValidImageUrl(event.detail),
-          imageUrl: getValidImageUrl(event.detail),
+          image: imageUrl,
+          imageUrl: imageUrl,
           price: parseFloat(event.detail.price || 0),
           originalPrice: parseFloat(event.detail.originalPrice || event.detail.price || 0),
           stock: parseInt(event.detail.stock || 0),
@@ -197,13 +210,16 @@ export default function VendorDashboard() {
       if (newProduct) {
         console.log('Found new product in sessionStorage:', newProduct);
         
+        // Simply use the original image URL
+        const imageUrl = newProduct.image || newProduct.imageUrl || DEFAULT_IMAGE;
+        
         // Process the product to ensure it has all required fields
         const processedProduct = {
           ...newProduct,
           _id: newProduct._id || newProduct.id || `temp_${Date.now()}`,
           id: newProduct.id || newProduct._id || `temp_${Date.now()}`,
-          image: getValidImageUrl(newProduct),
-          imageUrl: getValidImageUrl(newProduct),
+          image: imageUrl,
+          imageUrl: imageUrl,
           price: parseFloat(newProduct.price || 0),
           originalPrice: parseFloat(newProduct.originalPrice || newProduct.price || 0),
           stock: parseInt(newProduct.stock || 0),
@@ -250,29 +266,39 @@ export default function VendorDashboard() {
       }
       
       if (productsData && Array.isArray(productsData) && productsData.length > 0) {
-        // Process products with improved image handling
-        const processedProducts = productsData.map(product => ({
-          ...product,
-          _id: product._id || product.id || `api_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-          id: product.id || product._id || `api_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-          image: getValidImageUrl(product),
-          imageUrl: getValidImageUrl(product),
-          price: parseFloat(product.price || 0),
-          originalPrice: parseFloat(product.originalPrice || product.price || 0),
-          stock: parseInt(product.stock || 0),
-          category: product.category || 'Other'
-        }));
+        console.log('Processing products data:', productsData.length);
         
-        // Merge with existing products
+        // Process products with simplified image handling
+        const processedProducts = productsData.map(product => {
+          // Keep the original image URLs
+          const imageUrl = product.image || product.imageUrl || DEFAULT_IMAGE;
+          
+          return {
+            ...product,
+            _id: product._id || product.id || `api_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+            id: product.id || product._id || `api_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+            image: imageUrl,
+            imageUrl: imageUrl,
+            price: parseFloat(product.price || 0),
+            originalPrice: parseFloat(product.originalPrice || product.price || 0),
+            stock: parseInt(product.stock || 0),
+            category: product.category || 'Other'
+          };
+        });
+        
+        // Merge with existing products - KEEP BOTH API AND NEW PRODUCTS
         setProducts(prevProducts => {
-          // Only add products that don't already exist
+          // Create a set of existing product IDs
           const existingIds = new Set(prevProducts.map(p => p._id || p.id));
-          const newProducts = processedProducts.filter(p => 
+          
+          // Filter out products we already have in the state
+          const newApiProducts = processedProducts.filter(p => 
             !existingIds.has(p._id) && !existingIds.has(p.id)
           );
           
-          if (newProducts.length > 0) {
-            const updatedProducts = [...prevProducts, ...newProducts];
+          if (newApiProducts.length > 0) {
+            // Combine the new products with existing ones, preserving the order
+            const updatedProducts = [...prevProducts, ...newApiProducts];
             // Save to localStorage as backup
             saveProductsToLocalStorage(updatedProducts);
             return updatedProducts;
@@ -327,7 +353,7 @@ export default function VendorDashboard() {
         price: product.price || '',
         originalPrice: product.originalPrice || product.price || '',
         description: product.description || '',
-        image: product.image || product.imageUrl || DEFAULT_IMAGE,
+        image: product.image || product.imageUrl || 'https://via.placeholder.com/300',
         stock: product.stock || 10,
       });
     } else {
@@ -384,8 +410,12 @@ export default function VendorDashboard() {
       // Validate required fields
       if (!formData.name || !formData.price || !formData.category) {
         setError("Please fill in all required fields");
-      return;
-    }
+        return;
+      }
+      
+      // Simply use the original image URL
+      const imageUrl = formData.image || DEFAULT_IMAGE;
+      console.log('Using image URL for submission:', imageUrl);
 
       // Prepare the minimal product data needed by the API
       const productData = {
@@ -395,8 +425,8 @@ export default function VendorDashboard() {
         originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : parseFloat(formData.price),
         category: formData.category,
         stock: parseInt(formData.stock || 10),
-        image: formData.image || '',
-        imageUrl: formData.image || ''
+        image: imageUrl,
+        imageUrl: imageUrl
       };
       
       console.log('Submitting product data:', productData);
@@ -475,9 +505,24 @@ export default function VendorDashboard() {
     }
   };
 
-  const handleLogout = () => {
-    logoutVendor();
-    navigate('/vendor-login');
+  const handleLogout = async () => {
+    try {
+      console.log('Logging out vendor...');
+      // Clear any errors or notifications
+      setError('');
+      setNotification({ show: false, message: '', type: '' });
+      
+      // Call the logout function
+      await logoutVendor();
+      
+      console.log('Logout successful, redirecting to login page...');
+      // Redirect to login page
+      navigate('/vendor-login');
+    } catch (error) {
+      console.error('Error during logout:', error);
+      // Force navigation even if there's an error
+      window.location.href = '/vendor-login';
+    }
   };
 
   // Add a refresh button to the header for manual product refresh
@@ -546,10 +591,15 @@ export default function VendorDashboard() {
             ADD NEW PRODUCT
           </Link>
           <button 
-            onClick={handleLogout}
+            onClick={(e) => {
+              e.preventDefault();
+              console.log('Logout button clicked');
+              handleLogout();
+            }}
             className="logout-button"
+            type="button"
           >
-            LOGOUT
+            <FontAwesomeIcon icon={faSignOutAlt} /> LOGOUT
           </button>
         </div>
       </header>
@@ -570,7 +620,7 @@ export default function VendorDashboard() {
                 <p>Server is currently unavailable. Showing placeholder products.</p>
               </div>
             )}
-        {products.map((product) => (
+            {products.map((product) => (
               <div key={product._id} className={`product-card ${product.isMockData ? 'mock-product' : ''}`}>
                 <div className="product-image">
                   {product.isMockData && (
@@ -578,16 +628,23 @@ export default function VendorDashboard() {
                   )}
                   {product.discountPrice && product.price > product.discountPrice && (
                     <div className="discount-badge">
-                      {Math.round(((product.price - product.discountPrice) / product.price) * 100)}% OFF
+                      20% OFF
                     </div>
                   )}
-                  <img 
-                    src={getValidImageUrl(product)} 
+                  <CardMedia
+                    component="img"
+                    image={product.image || product.imageUrl || 'https://via.placeholder.com/300'}
                     alt={product.name || 'Product'}
+                    sx={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'contain',
+                      backgroundColor: '#fff'
+                    }}
                     onError={(e) => {
-                      console.log('Image failed to load, using fallback');
+                      console.log('Image failed to load:', e.target.src);
                       e.target.onerror = null; // Prevent infinite loop
-                      e.target.src = DEFAULT_IMAGE;
+                      e.target.src = 'https://via.placeholder.com/300';
                     }}
                   />
                 </div>
@@ -595,8 +652,8 @@ export default function VendorDashboard() {
                   <h3 className="product-title">{product.name}</h3>
                   <div className="product-pricing">
                     <span className="current-price">₹{product.discountPrice || product.price}</span>
-                    {product.discountPrice && product.price > product.discountPrice && (
-                      <span className="original-price">₹{product.price}</span>
+                    {product.originalPrice > product.price && (
+                      <span className="original-price">₹{product.originalPrice}</span>
                     )}
                   </div>
                   <div className="product-rating">
@@ -620,7 +677,7 @@ export default function VendorDashboard() {
                   </div>
                   <div className="stock-status">
                     <span className={`status ${product.stock > 0 ? 'in-stock' : 'out-of-stock'}`}>
-                      {product.stock > 0 ? `In Stock (${product.stock})` : 'Out of Stock'}
+                      In Stock ({product.stock})
                     </span>
                   </div>
                 </div>
@@ -743,18 +800,24 @@ export default function VendorDashboard() {
             {formData.image && (
               <Box sx={{ mt: 2, textAlign: 'center' }}>
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>Image Preview:</Typography>
-                <img 
-                  src={formData.image} 
+                <CardMedia
+                  component="img"
+                  image={formData.image || 'https://via.placeholder.com/300'}
                   alt="Product Preview" 
-                  style={{ 
+                  sx={{ 
                     maxWidth: '100%', 
                     maxHeight: '200px',
                     objectFit: 'contain',
+                    mx: 'auto',
                     border: '1px solid #eee',
-                    borderRadius: '4px'
+                    borderRadius: '4px',
+                    bgcolor: '#fff'
                   }}
                   onError={(e) => {
-                    e.target.src = DEFAULT_IMAGE;
+                    console.error('Preview image failed to load:', formData.image);
+                    e.target.onerror = null; // Prevent infinite loop
+                    e.target.src = 'https://via.placeholder.com/300';
+                    e.target.style.border = '1px dashed #ff6b6b';
                   }}
                 />
               </Box>

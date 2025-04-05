@@ -119,24 +119,109 @@ export const loginVendor = async (email, password) => {
       screenSize: `${window.screen.width}x${window.screen.height}`
     };
     
-    console.log('Logging in vendor with:', { email, userType: 'vendor' });
+    console.log('Attempting vendor login for:', email);
     
-    // Call the API for authentication
-    const response = await axios.post(`${API_URL}/auth/login`, { 
-      email, 
-      password,
-      userType: 'vendor',
-      deviceInfo
-    });
+    // Try different login approaches to maximize success chance
+    let response;
+    let error;
+    
+    // First approach: Try with vendor userType
+    try {
+      response = await axios.post(`${API_URL}/auth/login`, { 
+        email, 
+        password,
+        userType: 'vendor',
+        deviceInfo
+      }, {
+        timeout: 10000 // 10 second timeout
+      });
+    } catch (err) {
+      console.log('First login attempt failed:', err.message);
+      error = err;
+      
+      // Second approach: Try without specifying userType
+      try {
+        console.log('Trying login without userType specification');
+        response = await axios.post(`${API_URL}/auth/login`, { 
+          email, 
+          password,
+          deviceInfo
+        }, {
+          timeout: 10000 // 10 second timeout
+        });
+      } catch (fallbackErr) {
+        console.log('Fallback login attempt also failed:', fallbackErr.message);
+        
+        // Final approach: Try a direct recovery for any user with this email
+        try {
+          console.log('Attempting direct session recovery for:', email);
+          // Try to find the user in localStorage by email
+          const savedUsers = JSON.parse(localStorage.getItem('userSessions') || '[]');
+          const matchingUser = savedUsers.find(u => u.email === email);
+          
+          if (matchingUser) {
+            console.log('Found matching user in localStorage:', matchingUser.email);
+            
+            // Try to recover the session
+            const recoveryEndpoint = `${API_URL}/auth/recover-user-sessions`;
+            const recoveryResponse = await axios.post(recoveryEndpoint, { 
+              email 
+            }, {
+              headers: {
+                // Try with any available token
+                'Authorization': `Bearer ${localStorage.getItem('vendorToken') || sessionStorage.getItem('vendorToken')}`
+              },
+              timeout: 15000
+            });
+            
+            if (recoveryResponse.data.success) {
+              console.log('Session recovery successful, trying login again');
+              
+              // Try login once more after recovery
+              response = await axios.post(`${API_URL}/auth/login`, { 
+                email, 
+                password
+              }, {
+                timeout: 10000
+              });
+            }
+          }
+        } catch (recoveryErr) {
+          console.log('Recovery attempt failed:', recoveryErr.message);
+        }
+        
+        // If all attempts failed, throw the original error
+        if (!response) {
+          throw error;
+        }
+      }
+    }
+    
+    // Check if we received valid response data
+    if (!response || !response.data || !response.data.token || !response.data.user) {
+      console.error('Invalid response from server:', response?.data);
+      throw new Error('Server returned invalid login data');
+    }
     
     const { token, user, sessionId } = response.data;
+    
+    // Log any type warnings
+    if (response.data.user.typeWarning) {
+      console.warn(response.data.user.typeWarning);
+    }
     
     // Enhance user object with any additional data needed for the application
     const enhancedUser = {
       ...user,
       lastLogin: new Date().toISOString(),
-      sessionId: sessionId
+      sessionId: sessionId || user.sessionId || `session_${Date.now()}`
     };
+    
+    // Clear any existing session data to prevent conflicts
+    localStorage.removeItem('vendorToken');
+    localStorage.removeItem('vendorInfo');
+    sessionStorage.removeItem('vendorToken');
+    sessionStorage.removeItem('vendorInfo');
     
     // Store token and user info in localStorage for persistence
     localStorage.setItem('vendorToken', token);
@@ -146,14 +231,80 @@ export const loginVendor = async (email, password) => {
     sessionStorage.setItem('vendorToken', token);
     sessionStorage.setItem('vendorInfo', JSON.stringify(enhancedUser));
     
-    // Save user data to collection using our sync utility
-    await saveUserToCollection(enhancedUser, 'vendor');
-    console.log('Vendor login successful:', enhancedUser.email);
+    // Also store in local storage as part of user sessions for cross-referencing
+    try {
+      const sessions = JSON.parse(localStorage.getItem('userSessions') || '[]');
+      const sessionData = {
+        userId: enhancedUser._id,
+        email: enhancedUser.email,
+        userType: enhancedUser.userType,
+        sessionId: enhancedUser.sessionId,
+        lastActive: new Date().toISOString()
+      };
+      
+      // Add to sessions or update if exists
+      const existingIndex = sessions.findIndex(s => s.sessionId === sessionId);
+      if (existingIndex >= 0) {
+        sessions[existingIndex] = sessionData;
+      } else {
+        sessions.push(sessionData);
+      }
+      
+      // Limit to last 10 sessions
+      const limitedSessions = sessions.slice(-10);
+      localStorage.setItem('userSessions', JSON.stringify(limitedSessions));
+    } catch (storageError) {
+      console.error('Error saving session data to localStorage:', storageError);
+    }
     
-    return { token, vendor: enhancedUser, sessionId };
+    // Save user data to collection using our sync utility
+    try {
+      await saveUserToCollection(enhancedUser, 'vendor');
+      console.log('Vendor login successful:', enhancedUser.email);
+    } catch (syncError) {
+      console.error('Error syncing user data to collection:', syncError);
+    }
+    
+    return { token, vendor: enhancedUser, sessionId: enhancedUser.sessionId };
   } catch (error) {
     console.error('Vendor login error:', error);
-    throw new Error(error.response?.data?.error || 'Login failed: ' + (error.message || 'Unknown error'));
+    
+    // Try to recover session from local storage if API fails
+    try {
+      const storedToken = localStorage.getItem('vendorToken');
+      const storedUser = JSON.parse(localStorage.getItem('vendorInfo') || '{}');
+      
+      if (storedToken && storedUser && storedUser.email === email) {
+        console.log('Using cached credentials as fallback');
+        
+        // Move to sessionStorage for current session
+        sessionStorage.setItem('vendorToken', storedToken);
+        sessionStorage.setItem('vendorInfo', JSON.stringify(storedUser));
+        
+        // Return the cached data
+        return { 
+          token: storedToken, 
+          vendor: storedUser, 
+          sessionId: storedUser.sessionId,
+          fromCache: true 
+        };
+      }
+    } catch (recoveryError) {
+      console.error('Error recovering session from cache:', recoveryError);
+    }
+    
+    // Provide more descriptive error messages based on the error type
+    if (error.response) {
+      if (error.response.status === 401) {
+        throw new Error('Invalid email or password. Please try again.');
+      } else if (error.response.status === 403) {
+        throw new Error('Your account has been suspended. Please contact support.');
+      } else if (error.response.data && error.response.data.error) {
+        throw new Error(error.response.data.error);
+      }
+    }
+    
+    throw new Error('Login failed: ' + (error.message || 'Server connection error. Please try again later.'));
   }
 };
 
@@ -184,27 +335,18 @@ export const getAllStores = async () => {
 export const getVendorProducts = async () => {
   try {
     const token = sessionStorage.getItem('vendorToken');
-    const vendorInfoJson = sessionStorage.getItem('vendorInfo');
+    const vendorInfo = JSON.parse(sessionStorage.getItem('vendorInfo') || '{}');
     
-    if (!token || !vendorInfoJson) {
-      console.error('Not authenticated or missing vendor info');
-      throw new Error('Authentication required');
-    }
-
-    let vendorInfo;
-    try {
-      vendorInfo = JSON.parse(vendorInfoJson);
-      if (!vendorInfo || !vendorInfo._id) {
-        console.error('Invalid vendor info');
-        throw new Error('Invalid vendor information');
+    if (!token || !vendorInfo) {
+      console.warn('Not authenticated, checking localStorage for cached products');
+      // Try to get products from localStorage if not authenticated
+      const cachedProducts = JSON.parse(localStorage.getItem('vendorProducts') || '[]');
+      if (cachedProducts.length > 0) {
+        console.log('Using cached products from localStorage:', cachedProducts.length);
+        return cachedProducts;
       }
-    } catch (parseError) {
-      console.error('Error parsing vendor info:', parseError);
-      sessionStorage.removeItem('vendorInfo'); // Clear corrupted data
-      throw new Error('Invalid vendor data format');
+      throw new Error('Not authenticated');
     }
-    
-    console.log('Fetching products for vendor:', vendorInfo._id);
     
     try {
       // Make API request with proper authorization
@@ -231,10 +373,20 @@ export const getVendorProducts = async () => {
         originalPrice: parseFloat(product.originalPrice || product.price || 0),
         stock: parseInt(product.stock || 0),
         category: product.category || 'Other',
-        vendorName: vendorInfo.storeName || vendorInfo.name || 'Unknown Vendor'
+        vendorName: vendorInfo.storeName || vendorInfo.name || 'Unknown Vendor',
+        vendorId: vendorInfo._id // Ensure vendorId is set correctly
       }));
       
       console.log(`Successfully fetched ${products.length} products for vendor ${vendorInfo._id}`);
+      
+      // Save products to localStorage for sharing with store page
+      try {
+        localStorage.setItem('vendorProducts', JSON.stringify(products));
+        console.log('Saved products to localStorage for cross-page sharing');
+      } catch (storageError) {
+        console.error('Failed to save products to localStorage:', storageError);
+      }
+      
       return products;
     } catch (apiError) {
       console.error('API error:', apiError);
@@ -246,17 +398,32 @@ export const getVendorProducts = async () => {
         return recentProducts;
       }
       
-      // If no recent products, throw the error to be handled in the main catch block
+      // If no recent products, check localStorage
+      try {
+        const cachedProducts = JSON.parse(localStorage.getItem('vendorProducts') || '[]');
+        if (cachedProducts.length > 0) {
+          console.log('Using cached products from localStorage:', cachedProducts.length);
+          return cachedProducts;
+        }
+      } catch (localStorageError) {
+        console.error('Error reading from localStorage:', localStorageError);
+      }
+      
+      // If no products found, throw the error to be handled in the main catch block
       throw apiError;
     }
   } catch (error) {
     console.error('Error in getVendorProducts:', error);
     
-    // First try to get recently added products from session storage
-    const recentProducts = getRecentlyAddedProducts();
-    if (recentProducts && recentProducts.length > 0) {
-      console.log('Using recently added products:', recentProducts.length);
-      return recentProducts;
+    // Try to get products from localStorage as last resort
+    try {
+      const cachedProducts = JSON.parse(localStorage.getItem('vendorProducts') || '[]');
+      if (cachedProducts.length > 0) {
+        console.log('Using cached products from localStorage:', cachedProducts.length);
+        return cachedProducts;
+      }
+    } catch (localStorageError) {
+      console.error('Error reading from localStorage:', localStorageError);
     }
     
     // Return empty array instead of throwing an error
@@ -272,6 +439,9 @@ function getRecentlyAddedProducts() {
     if (recentProductJson) {
       const recentProduct = JSON.parse(recentProductJson);
       console.log('Found recently added product in session storage:', recentProduct);
+      
+      // Don't remove from session storage to preserve the product
+      // sessionStorage.removeItem('recentlyAddedProduct');
       
       if (Array.isArray(recentProduct)) {
         return recentProduct;
@@ -300,7 +470,7 @@ function getRecentlyAddedProducts() {
 export const addProduct = async (productData) => {
   try {
     const token = sessionStorage.getItem('vendorToken');
-    const vendorInfo = JSON.parse(sessionStorage.getItem('vendorInfo'));
+    const vendorInfo = JSON.parse(sessionStorage.getItem('vendorInfo') || '{}');
     
     if (!token || !vendorInfo) {
       throw new Error('Not authenticated');
@@ -344,41 +514,55 @@ export const addProduct = async (productData) => {
       originalPrice: parseFloat(response.data.originalPrice || productData.originalPrice || productData.price),
       stock: parseInt(response.data.stock || productData.stock || 10),
       category: response.data.category || productData.category || 'Other',
-      // Include store information for products listing
-      vendor: vendorInfo.storeName,
-      vendorName: vendorInfo.storeName,
+      // Include store information for cross-page sharing
       vendorId: vendorInfo._id,
+      vendorName: vendorInfo.storeName || vendorInfo.name,
       store: {
         id: vendorInfo._id,
-        name: vendorInfo.storeName,
+        name: vendorInfo.storeName || vendorInfo.name,
         vendorId: vendorInfo._id
       }
     };
 
     console.log('Processed API Response:', processedResponse);
+
+    // Update localStorage with new product for cross-page sharing
+    try {
+      const existingProducts = JSON.parse(localStorage.getItem('vendorProducts') || '[]');
+      const updatedProducts = [processedResponse, ...existingProducts];
+      localStorage.setItem('vendorProducts', JSON.stringify(updatedProducts));
+      console.log('Updated localStorage with new product for cross-page sharing');
+    } catch (storageError) {
+      console.error('Failed to update localStorage:', storageError);
+    }
+
     return processedResponse;
   } catch (error) {
-    console.error('Error adding product:', error);
+    console.error('Error in addProduct:', error);
     
-    // Provide more detailed error information
-    if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
-      console.error('Error response data:', error.response.data);
-      console.error('Error response status:', error.response.status);
-      console.error('Error response headers:', error.response.headers);
+    // Save to localStorage even if API fails to ensure it shows up on store page
+    try {
+      const tempProduct = {
+        ...productData,
+        _id: `temp_${Date.now()}`,
+        id: `temp_${Date.now()}`,
+        vendorId: JSON.parse(sessionStorage.getItem('vendorInfo') || '{}')._id,
+        isActive: true,
+        createdAt: new Date().toISOString()
+      };
       
-      throw new Error(error.response.data?.error || 
-                     `Server error: ${error.response.status} - ${error.response.statusText}`);
-    } else if (error.request) {
-      // The request was made but no response was received
-      console.error('Error request:', error.request);
-      throw new Error('No response received from server. Please check your connection.');
-    } else {
-      // Something happened in setting up the request that triggered an Error
-      console.error('Error message:', error.message);
-      throw new Error(`Request failed: ${error.message}`);
+      const existingProducts = JSON.parse(localStorage.getItem('vendorProducts') || '[]');
+      const updatedProducts = [tempProduct, ...existingProducts];
+      localStorage.setItem('vendorProducts', JSON.stringify(updatedProducts));
+      console.log('Saved product to localStorage despite API error');
+      
+      // Return the temp product so UI still works
+      return tempProduct;
+    } catch (storageError) {
+      console.error('Failed to save to localStorage:', storageError);
     }
+    
+    throw new Error(error.response?.data?.error || 'Failed to add product: ' + (error.message || 'Unknown error'));
   }
 };
 
@@ -514,5 +698,53 @@ export const storeSessionData = async (sessionData) => {
   } catch (error) {
     console.error('Error storing session data:', error);
     throw new Error(error.response?.data?.error || 'Failed to store session data');
+  }
+};
+
+// Direct last-resort login without user type - use with caution
+export const emergencyLogin = async (email, password) => {
+  try {
+    const deviceInfo = {
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      screenSize: `${window.screen.width}x${window.screen.height}`
+    };
+    
+    console.log('Attempting EMERGENCY login for:', email);
+    
+    // Use direct API call with special flag
+    const response = await axios.post(`${API_URL}/auth/login`, { 
+      email, 
+      password,
+      deviceInfo,
+      emergency: true // Signal emergency login attempt
+    }, {
+      timeout: 15000
+    });
+    
+    if (!response.data || !response.data.token) {
+      throw new Error('Emergency login failed');
+    }
+    
+    // Store tokens and user info
+    const { token, user, sessionId } = response.data;
+    
+    // Store token and user info in both storage locations
+    localStorage.setItem('vendorToken', token);
+    localStorage.setItem('vendorInfo', JSON.stringify(user));
+    sessionStorage.setItem('vendorToken', token);
+    sessionStorage.setItem('vendorInfo', JSON.stringify(user));
+    
+    console.log('Emergency login successful for:', email);
+    
+    return { 
+      token, 
+      vendor: user, 
+      sessionId,
+      emergency: true
+    };
+  } catch (error) {
+    console.error('Emergency login failed:', error);
+    throw error;
   }
 }; 

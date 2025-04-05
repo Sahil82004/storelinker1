@@ -83,18 +83,30 @@
 
 .logout-button {
   padding: 8px 24px;
-  background-color: transparent;
-  border: none;
+  background-color: #f1f3f4;
+  border: 1px solid #ddd;
   color: #5f6368;
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   border-radius: 4px;
-  transition: background-color 0.2s;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  outline: none;
+  position: relative;
+  z-index: 10;
 }
 
 .logout-button:hover {
-  background-color: #f1f3f4;
+  background-color: #e8eaed;
+  color: #202124;
+}
+
+.logout-button:active {
+  background-color: #dadce0;
+  transform: translateY(1px);
 }
 
 .dashboard-content {
@@ -185,19 +197,20 @@
 
 .products-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 24px;
-  padding: 24px;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 20px;
+  padding: 0;
 }
 
 .product-card {
   background: white;
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
   overflow: hidden;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   display: flex;
   flex-direction: column;
+  margin-bottom: 10px;
 }
 
 .product-card:hover {
@@ -208,10 +221,9 @@
 .product-image {
   position: relative;
   width: 100%;
-  height: 240px;
+  height: 220px;
   overflow: hidden;
-  border-radius: 8px 8px 0 0;
-  background: #f5f5f5;
+  background: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -220,30 +232,73 @@
 .product-image img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   transition: transform 0.3s ease;
-  display: block;
+  background-color: #fff;
 }
 
-/* Ensure images are properly contained */
 .product-image img[src*="placehold.co"],
 .product-image img[src*="placeholder.com"] {
   object-fit: contain;
-  padding: 10px;
-  background-color: #e3f2fd;
+  padding: 5px;
+  max-width: 80%;
+  max-height: 80%;
+}
+
+/* Additional styling for successfully loaded images */
+.product-image .image-loaded {
+  object-fit: contain;
+}
+
+/* Fix for broken images */
+.product-image img.error,
+.product-image img[src=""],
+.product-image img.image-error {
+  object-fit: contain;
+  width: 80%;
+  height: 80%;
+  opacity: 0.7;
+  background-color: #f5f5f5;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="%23999" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg>');
+  background-position: center;
+  background-repeat: no-repeat;
+  border: 1px dashed #ccc;
+}
+
+.product-image-element {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* Add a subtle loading animation */
+.product-image img:not(.image-loaded):not(.image-error) {
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.6;
+  }
 }
 
 .product-image:hover img {
-  transform: scale(1.05);
+  transform: scale(1.02);
 }
 
 .discount-badge {
   position: absolute;
   top: 12px;
   right: 12px;
-  background: #e53935;
+  background: #ff5e62;
   color: white;
-  padding: 4px 8px;
+  padding: 4px 10px;
   border-radius: 4px;
   font-size: 12px;
   font-weight: 600;
@@ -259,28 +314,30 @@
 }
 
 .product-title {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   color: #333;
   margin: 0;
-  line-height: 1.4;
+  line-height: 1.3;
+  margin-bottom: 5px;
 }
 
 .product-pricing {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  margin-bottom: 5px;
 }
 
 .current-price {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
-  color: #1a73e8;
+  color: #333;
 }
 
 .original-price {
-  font-size: 14px;
-  color: #666;
+  font-size: 16px;
+  color: #888;
   text-decoration: line-through;
 }
 
@@ -288,24 +345,25 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  margin-bottom: 5px;
 }
 
 .stars {
   color: #ffc107;
-  font-size: 14px;
+  font-size: 16px;
   letter-spacing: 1px;
 }
 
 .review-count {
-  color: #5f6368;
+  color: #666;
   font-size: 14px;
 }
 
 .product-description {
   font-size: 14px;
   color: #666;
-  margin: 0;
-  line-height: 1.5;
+  margin: 8px 0;
+  line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -315,18 +373,16 @@
 .store-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   margin: 12px 0;
-  padding: 8px;
-  background: #f8f9fa;
+  padding: 8px 10px;
+  background: #f9f9f9;
   border-radius: 6px;
 }
 
 .store-icon {
-  font-size: 20px;
-  color: #1a73e8;
-  width: 24px;
-  height: 24px;
+  font-size: 18px;
+  color: #3275e1;
 }
 
 .store-details {
@@ -348,20 +404,20 @@
 }
 
 .rating-value {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
-  color: #1a73e8;
+  color: #3275e1;
 }
 
 .stock-status {
-  margin-top: auto;
+  margin-top: 8px;
 }
 
 .status {
   display: inline-block;
   padding: 4px 8px;
   border-radius: 4px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
 }
 

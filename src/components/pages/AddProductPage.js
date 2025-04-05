@@ -116,16 +116,35 @@ const AddProductPage = () => {
 
       // Fix the image URL handling
       let imageUrl = '';
-      if (formData.imageUrl) {
-        imageUrl = formData.imageUrl;
+      if (formData.imageUrl && formData.imageUrl.trim()) {
+        // Make sure the URL is valid with protocol
+        imageUrl = formData.imageUrl.trim();
+        if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
+          imageUrl = 'https://' + imageUrl.replace(/^\/\//, '');
+        }
+        
+        // Validate URL format
+        try {
+          new URL(imageUrl);
+        } catch (e) {
+          console.error('Invalid URL provided:', imageUrl);
+          imageUrl = 'https://placehold.co/500x500/e3f2fd/1a73e8?text=Product+Image';
+        }
       } else if (images.length > 0) {
         if (images[0].preview && images[0].preview.startsWith('http')) {
           imageUrl = images[0].preview;
+          // Validate URL format
+          try {
+            new URL(imageUrl);
+          } catch (e) {
+            console.error('Invalid preview URL:', imageUrl);
+            imageUrl = 'https://placehold.co/500x500/e3f2fd/1a73e8?text=Product+Image';
+          }
         } else {
-          imageUrl = 'https://via.placeholder.com/500x500?text=Product+Image';
+          imageUrl = 'https://placehold.co/500x500/e3f2fd/1a73e8?text=Product+Image';
         }
       } else {
-        imageUrl = 'https://via.placeholder.com/500x500?text=Product+Image';
+        imageUrl = 'https://placehold.co/500x500/e3f2fd/1a73e8?text=Product+Image';
       }
 
       // Generate a temporary ID for immediate display
@@ -148,18 +167,50 @@ const AddProductPage = () => {
         _id: tempId
       };
 
-      // Save to localStorage as backup
+      // Save to localStorage as backup - PRESERVE EXISTING PRODUCTS
       try {
         const existingProducts = JSON.parse(localStorage.getItem('vendorProducts') || '[]');
-        const updatedProducts = [productData, ...existingProducts].slice(0, 20); // Keep last 20 products
+        // Add new product only if it doesn't exist (avoid duplicates)
+        const exists = existingProducts.some(p => 
+          (p.name === productData.name && p.price === productData.price)
+        );
+        
+        let updatedProducts;
+        if (!exists) {
+          // Add the new product to the beginning
+          updatedProducts = [productData, ...existingProducts].slice(0, 50); // Keep last 50 products
+        } else {
+          // If product exists, no change
+          updatedProducts = existingProducts;
+        }
+        
         localStorage.setItem('vendorProducts', JSON.stringify(updatedProducts));
       } catch (storageError) {
         console.error('Error saving to localStorage:', storageError);
       }
 
-      // Save in sessionStorage for immediate display
+      // Save in sessionStorage for immediate display - IMPLEMENT ARRAY APPROACH
       try {
-        sessionStorage.setItem('recentlyAddedProduct', JSON.stringify(productData));
+        // Check if existing product
+        const existingJson = sessionStorage.getItem('recentlyAddedProduct');
+        let updatedRecentProducts = [];
+        
+        if (existingJson) {
+          const existingProduct = JSON.parse(existingJson);
+          if (Array.isArray(existingProduct)) {
+            // Add to existing array
+            updatedRecentProducts = [productData, ...existingProduct].slice(0, 20);
+          } else {
+            // Create array with old and new product
+            updatedRecentProducts = [productData, existingProduct];
+          }
+        } else {
+          // First product
+          updatedRecentProducts = [productData];
+        }
+        
+        // Save array of products
+        sessionStorage.setItem('recentlyAddedProduct', JSON.stringify(updatedRecentProducts));
         
         // Dispatch event for real-time update
         window.dispatchEvent(new CustomEvent('productUpdated', {
@@ -186,7 +237,19 @@ const AddProductPage = () => {
             localStorage.setItem('vendorProducts', JSON.stringify(updatedProducts));
             
             // Update sessionStorage with the actual product data
-            sessionStorage.setItem('recentlyAddedProduct', JSON.stringify(savedProduct));
+            const existingJson = sessionStorage.getItem('recentlyAddedProduct');
+            if (existingJson) {
+              const existingProducts = JSON.parse(existingJson);
+              let updatedRecent;
+              if (Array.isArray(existingProducts)) {
+                updatedRecent = existingProducts.map(p => 
+                  p._id === tempId ? savedProduct : p
+                );
+              } else {
+                updatedRecent = savedProduct;
+              }
+              sessionStorage.setItem('recentlyAddedProduct', JSON.stringify(updatedRecent));
+            }
             
             // Dispatch event with updated data
             window.dispatchEvent(new CustomEvent('productUpdated', {
@@ -496,7 +559,15 @@ const AddProductPage = () => {
                 <div className="image-preview-container" id="image-preview-container">
                   {images.map(image => (
                     <div className="image-preview" key={image.id}>
-                      <img src={image.preview} alt="Preview" />
+                      <img 
+                        src={image.preview} 
+                        alt="Preview" 
+                        onError={(e) => {
+                          console.log('Preview image failed to load:', image.preview);
+                          e.target.onerror = null; // Prevent infinite loop
+                          e.target.src = 'https://placehold.co/300x300/e3f2fd/1a73e8?text=Error';
+                        }}
+                      />
                       <div 
                         className="remove-image"
                         onClick={() => removeImage(image.id)}

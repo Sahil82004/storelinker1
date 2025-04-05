@@ -213,12 +213,22 @@ const VendorDashboard = () => {
               <div key={product._id} className="product-card">
                 <div className="product-image">
                   <img 
-                    src={product.image || product.imageUrl || 'https://via.placeholder.com/300'} 
+                    src={product.image || product.imageUrl || 'https://placehold.co/300x300?text=Product'} 
                     alt={product.name}
                     onError={(e) => {
                       console.log('Image failed to load:', product.image || product.imageUrl);
-                      e.target.src = 'https://via.placeholder.com/300';
+                      e.target.onerror = null; // Prevent infinite loop
+                      e.target.src = 'https://placehold.co/300x300?text=Product';
                     }}
+                    loading="lazy"
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'contain',
+                      padding: '10px',
+                      backgroundColor: '#f8f9fa'
+                    }}
+                    className="product-image-element"
                   />
                 </div>
                 <div className="product-details">

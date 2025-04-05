@@ -219,13 +219,41 @@ router.get('/store/:storeId', async (req, res) => {
     let products = [];
     
     try {
-      // Try to fetch products from the database
+      // Try to fetch products from the database with enhanced query
+      // We look for products where either vendorId or storeId matches
       products = await Product.find({
-        vendorId: storeId,
-        isActive: true
+        $or: [
+          { vendorId: storeId },
+          { storeId: storeId },
+          { 'vendor._id': storeId },
+          { 'store.id': storeId }
+        ],
+        isActive: { $ne: false } // Include products where isActive is true or not set
       }).populate('vendorId', 'name storeName');
       
       console.log(`Found ${products.length} products for store ${storeId}`);
+      
+      // If no products found, try to use a more lenient query
+      if (products.length === 0) {
+        console.log('No products found, trying backup query...');
+        
+        // Get all products and manually filter
+        const allProducts = await Product.find({}).populate('vendorId', 'name storeName');
+        
+        // Filter products that might have the storeId in different fields
+        products = allProducts.filter(product => {
+          const vendorIdString = String(product.vendorId?._id || product.vendorId || '');
+          const storeIdString = String(product.storeId || product.store?.id || '');
+          const matchesVendor = vendorIdString === storeId;
+          const matchesStore = storeIdString === storeId;
+          
+          console.log(`Product ${product._id}: vendorId=${vendorIdString}, storeId=${storeIdString}, matches=${matchesVendor || matchesStore}`);
+          
+          return matchesVendor || matchesStore;
+        });
+        
+        console.log(`Backup query found ${products.length} products`);
+      }
     } catch (dbError) {
       console.error('Database error fetching products:', dbError);
       // Continue execution even if database query fails
@@ -234,17 +262,18 @@ router.get('/store/:storeId', async (req, res) => {
     
     // Transform products to include consistent fields for frontend
     const transformedProducts = products.map(product => {
-      const productObj = product.toObject();
+      const productObj = typeof product.toObject === 'function' ? product.toObject() : product;
       return {
         ...productObj,
         id: productObj._id,
-        image: productObj.imageUrl,
+        image: productObj.imageUrl || productObj.image,
+        imageUrl: productObj.imageUrl || productObj.image,
         originalPrice: productObj.originalPrice || productObj.price,
         discountPrice: productObj.discountPrice || null,
         rating: productObj.rating || 4.5,
         reviewCount: productObj.reviewCount || 0,
         stock: productObj.stock || 10,
-        vendorName: productObj.vendorId?.storeName || 'Unknown Vendor',
+        vendorName: productObj.vendorId?.storeName || productObj.vendorName || 'Unknown Vendor',
       };
     });
     

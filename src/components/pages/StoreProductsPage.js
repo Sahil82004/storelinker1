@@ -5,8 +5,8 @@ import { faStore, faLocationDot, faPhone, faExclamationCircle } from '@fortaweso
 import axios from 'axios';
 import '../../assets/css/StoreProductsPage.css';
 
-// Configure axios base URL
-axios.defaults.baseURL = 'http://localhost:5000';
+// Configure axios base URL - updated to use correct port
+axios.defaults.baseURL = 'http://localhost:5002';
 
 // Default placeholder image
 const DEFAULT_IMAGE = 'https://via.placeholder.com/300x300?text=Product+Image';
@@ -95,15 +95,45 @@ const StoreProductsPage = () => {
         // Then fetch products from the store
         let productsData = [];
         try {
-          const productsResponse = await axios.get(`/api/products/store/${storeId}`);
+          // First try with the default axios config
+          console.log(`Attempting to fetch products from: ${axios.defaults.baseURL}/api/products/store/${storeId}`);
+          let productsResponse;
+          
+          try {
+            productsResponse = await axios.get(`/api/products/store/${storeId}`);
+          } catch (initialError) {
+            console.error('Initial products fetch failed, trying alternate port:', initialError);
+            
+            // Try with port 5002 directly if first attempt fails
+            productsResponse = await axios.get(`http://localhost:5002/api/products/store/${storeId}`);
+          }
+          
           console.log('Fetched products from API:', productsResponse.data);
           
           if (Array.isArray(productsResponse.data)) {
             productsData = productsResponse.data;
           }
+          
+          // If still no products, try to fetch from localStorage as fallback
+          if (productsData.length === 0) {
+            console.log('No products from API, trying localStorage...');
+            try {
+              const vendorProducts = JSON.parse(localStorage.getItem('vendorProducts') || '[]');
+              if (vendorProducts.length > 0) {
+                // Filter to only show this vendor's products
+                const storeProducts = vendorProducts.filter(p => p.vendorId === storeId);
+                if (storeProducts.length > 0) {
+                  console.log('Found products in localStorage:', storeProducts.length);
+                  productsData = storeProducts;
+                }
+              }
+            } catch (localStorageError) {
+              console.error('Error reading from localStorage:', localStorageError);
+            }
+          }
         } catch (productsError) {
-          console.error('Error fetching products:', productsError);
-          // Use mock product data if the API call fails
+          console.error('All product fetch attempts failed:', productsError);
+          // Use mock product data if all API calls fail
           productsData = [createMockProduct(`mock_${Math.random().toString(36).substring(2, 9)}`, storeId)];
           console.log('Using mock product data:', productsData);
         }
