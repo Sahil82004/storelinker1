@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faEnvelope, faLock } from '@fortawesome/free-solid-svg-icons';
 import { faGoogle, faFacebookF } from '@fortawesome/free-brands-svg-icons';
-import { loginCustomer } from '../../services/customerService';
+import { loginCustomer, emergencyLogin } from '../../services/customerService';
 import { login } from '../../services/authService';
 import '../../assets/css/LoginPage.css';
 
@@ -28,16 +28,66 @@ const LoginPage = () => {
     setLoading(true);
     setError('');
 
+    if (!email.trim() || !password.trim()) {
+      setError('Please enter both email and password');
+      setLoading(false);
+      return;
+    }
+
     try {
       console.log('Attempting to login with:', { email, password, userType: 'customer' });
       
-      // Explicitly pass userType as 'customer'
-      const result = await loginCustomer(email, password);
+      // Try standard login first
+      let result;
+      let loginSuccessful = false;
+
+      try {
+        // Explicitly pass userType as 'customer'
+        result = await loginCustomer(email, password);
+        loginSuccessful = true;
+      } catch (loginError) {
+        console.error('Standard login failed:', loginError);
+        
+        if (loginError.message.includes('Unable to connect') || 
+            loginError.message.includes('Network Error') ||
+            loginError.message.includes('service not available')) {
+          
+          console.log('Connection issue detected, trying emergency login...');
+          try {
+            result = await emergencyLogin(email, password);
+            loginSuccessful = true;
+            console.log('Emergency login successful', result);
+          } catch (emergencyError) {
+            console.error('Emergency login failed:', emergencyError);
+            throw new Error('Unable to connect to the login service. Please try again later.');
+          }
+        } else {
+          // For credential errors, provide clear feedback
+          if (loginError.message.includes('Invalid credentials')) {
+            throw new Error('Invalid email or password. Please check your credentials and try again.');
+          } else {
+            // For other errors, rethrow with clear message
+            throw loginError;
+          }
+        }
+      }
       
-      // Store user data in auth service
-      if (result && result.customer) {
+      // If we got here with loginSuccessful flag, process the login
+      if (loginSuccessful && result) {
         console.log('Login successful, storing customer data');
-        login(result.customer);
+        
+        // Accept result in various formats
+        const userData = result.customer || result.user || result;
+        
+        if (!userData) {
+          throw new Error('Login succeeded but user data is missing');
+        }
+        
+        // Store in auth service
+        login(userData);
+        
+        // Clear any errors
+        setError('');
         
         // Check if there's a redirect URL stored
         const redirectUrl = sessionStorage.getItem('redirectAfterLogin');
@@ -45,14 +95,32 @@ const LoginPage = () => {
           sessionStorage.removeItem('redirectAfterLogin');
           navigate(redirectUrl);
         } else {
-          navigate('/');
+          // If emergency/simulation login, show information message
+          if (result.emergency || result.localSimulation) {
+            console.log('Emergency/local login - would normally redirect');
+            // Don't redirect, but show success to allow inspection of login process
+            setError('');
+            setLoading(false);
+            // Wait briefly then redirect to make flow smoother
+            setTimeout(() => navigate('/'), 800);
+          } else {
+            navigate('/');
+          }
         }
       } else {
-        throw new Error('Login successful but user data is missing');
+        throw new Error('Login process completed but no valid result was returned');
       }
     } catch (err) {
       console.error('Login error:', err);
-      setError(err.message || 'Invalid email or password. Please try again.');
+      
+      // Show user-friendly error messages
+      if (err.message.includes('Network Error') || err.message.includes('service not available')) {
+        setError('Cannot connect to the login service. The server might be down or you might have network issues.');
+      } else if (err.message.includes('Invalid credentials')) {
+        setError('Invalid email or password. Please try again.');
+      } else {
+        setError(err.message || 'Login failed. Please try again later.');
+      }
     } finally {
       setLoading(false);
     }

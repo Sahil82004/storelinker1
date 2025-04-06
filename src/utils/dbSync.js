@@ -7,10 +7,38 @@ export const syncUserData = async (userData, userType = 'customer') => {
   try {
     // Add timestamp for tracking
     const syncTimestamp = new Date().toISOString();
+    
+    // Get sessionId from userData or from storage
+    let sessionId = userData.sessionId || userData.currentSessionId;
+    if (!sessionId) {
+      // Try to parse from token if available
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token') || 
+                    localStorage.getItem(`${userType}Token`) || sessionStorage.getItem(`${userType}Token`);
+      
+      if (token) {
+        try {
+          const tokenParts = token.split('.');
+          if (tokenParts.length === 3) {
+            const tokenData = JSON.parse(atob(tokenParts[1]));
+            sessionId = tokenData.sessionId;
+          }
+        } catch (tokenError) {
+          console.error('Error parsing token for sessionId:', tokenError);
+        }
+      }
+    }
+    
     const dataToSync = {
       ...userData,
       lastSyncedAt: syncTimestamp,
-      userType: userType
+      userType: userType,
+      // Include sessionId for updating UserSession collection
+      sessionId: sessionId,
+      // Include device info for session tracking
+      device: navigator.userAgent,
+      ipAddress: 'client', // Server will replace with actual IP
+      browser: getBrowserInfo(),
+      os: getOSInfo()
     };
 
     // Don't send password in sync
@@ -19,9 +47,9 @@ export const syncUserData = async (userData, userType = 'customer') => {
     }
 
     // Get token based on user type
-    const token = sessionStorage.getItem(
-      userType === 'vendor' ? 'vendorToken' : 'customerToken'
-    );
+    const token = sessionStorage.getItem('token') || localStorage.getItem('token') || 
+                  sessionStorage.getItem(userType === 'vendor' ? 'vendorToken' : 'customerToken') ||
+                  localStorage.getItem(userType === 'vendor' ? 'vendorToken' : 'customerToken');
 
     if (!token) {
       console.error('Unable to sync user data: No auth token found');
@@ -36,7 +64,8 @@ export const syncUserData = async (userData, userType = 'customer') => {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        timeout: 5000 // 5 second timeout
       }
     );
 
@@ -214,4 +243,43 @@ export const ensureUserCanLogin = async (email, savedUserInfo) => {
     console.error('Error ensuring user can login:', error);
     return { success: false, error: error.message };
   }
-}; 
+};
+
+// Helper functions to get browser and OS info
+function getBrowserInfo() {
+  const userAgent = navigator.userAgent;
+  let browserName = 'Unknown';
+  
+  if (userAgent.includes('Firefox')) {
+    browserName = 'Firefox';
+  } else if (userAgent.includes('Chrome')) {
+    browserName = 'Chrome';
+  } else if (userAgent.includes('Safari')) {
+    browserName = 'Safari';
+  } else if (userAgent.includes('Edge')) {
+    browserName = 'Edge';
+  } else if (userAgent.includes('MSIE') || userAgent.includes('Trident/')) {
+    browserName = 'Internet Explorer';
+  }
+  
+  return browserName;
+}
+
+function getOSInfo() {
+  const userAgent = navigator.userAgent;
+  let osName = 'Unknown';
+  
+  if (userAgent.includes('Windows')) {
+    osName = 'Windows';
+  } else if (userAgent.includes('Mac OS')) {
+    osName = 'MacOS';
+  } else if (userAgent.includes('Linux')) {
+    osName = 'Linux';
+  } else if (userAgent.includes('Android')) {
+    osName = 'Android';
+  } else if (userAgent.includes('iPhone') || userAgent.includes('iPad')) {
+    osName = 'iOS';
+  }
+  
+  return osName;
+} 

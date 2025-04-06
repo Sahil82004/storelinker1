@@ -52,12 +52,19 @@ const RegisterPage = () => {
       // Remove confirmPassword from the data sent to registration
       const { confirmPassword, ...registrationData } = formData;
       
-      // Add user type and registration date
+      // Format address in the structure expected by the server
       const userData = {
         ...registrationData,
+        address: {
+          street: registrationData.address,
+          city: registrationData.city,
+          state: registrationData.state,
+          postalCode: registrationData.zipCode,
+          country: 'US'
+        },
         userType: 'customer',
-        registrationDate: new Date().toISOString(),
-        active: true
+        name: registrationData.name,
+        isActive: true
       };
       
       console.log('Registering customer with data:', userData);

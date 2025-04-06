@@ -5,8 +5,10 @@ import {
   logoutVendor, 
   isVendorLoggedIn, 
   getVendorInfo,
-  emergencyLogin
+  emergencyLogin,
+  validateAuthToken as validateToken
 } from '../services/vendorService';
+import { jwtDecode } from 'jwt-decode';
 
 const AuthContext = createContext();
 
@@ -18,6 +20,9 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
+  const [token, setToken] = useState(localStorage.getItem('token') || sessionStorage.getItem('token') || null);
+  const [isSessionValid, setIsSessionValid] = useState(true);
+  const [notification, setNotification] = useState(null);
 
   // Initialize auth state from session storage
   useEffect(() => {
@@ -27,17 +32,29 @@ export function AuthProvider({ children }) {
         
         // Check if vendor is logged in with valid token
         if (isVendorLoggedIn()) {
-          const vendorInfo = getVendorInfo();
-          
-          if (vendorInfo) {
-            console.log('User found in session:', vendorInfo.email);
-            setCurrentUser(vendorInfo);
+          try {
+            // Use async function to get vendor info
+            const vendorInfoResponse = await getVendorInfo();
             
-            // Set axios default headers with token
-            const token = sessionStorage.getItem('vendorToken');
-            if (token) {
-              axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+            if (vendorInfoResponse.success && vendorInfoResponse.vendor) {
+              console.log('User found in session:', vendorInfoResponse.vendor.email);
+              setCurrentUser(vendorInfoResponse.vendor);
+              
+              // Set axios default headers with token
+              const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+              if (token) {
+                axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+                setToken(token);
+              }
+            } else {
+              console.warn('Could not retrieve vendor info, will try token validation');
+              // Try to validate token instead
+              await validateUserToken();
             }
+          } catch (vendorInfoError) {
+            console.error('Error fetching vendor info:', vendorInfoError);
+            // Try to validate token instead
+            await validateUserToken();
           }
         }
       } catch (error) {
@@ -65,152 +82,176 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  // Load user from token if available
+  useEffect(() => {
+    if (token) {
+      try {
+        // Decode token to get user data
+        const decoded = jwtDecode(token);
+        
+        // Check token expiration
+        const currentTime = Date.now() / 1000;
+        if (decoded.exp && decoded.exp < currentTime) {
+          console.log('Token expired, logging out');
+          setToken(null);
+          setCurrentUser(null);
+          localStorage.removeItem('token');
+          sessionStorage.removeItem('token');
+          setIsSessionValid(false);
+          setNotification({
+            type: 'error',
+            message: 'Your session has expired. Please log in again.'
+          });
+          return;
+        }
+        
+        // Set user from token
+        setCurrentUser({
+          id: decoded.id,
+          email: decoded.email,
+          userType: decoded.userType,
+          sessionId: decoded.sessionId
+        });
+        
+        // Validate token on mount
+        validateUserToken();
+        
+      } catch (error) {
+        console.error('Error parsing token:', error);
+        setToken(null);
+        setCurrentUser(null);
+        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
+      }
+    }
+  }, [token]);
+
+  // Validate token with backend
+  const validateUserToken = async () => {
+    if (!token) return false;
+    
+    try {
+      const response = await validateToken(token);
+      
+      if (response.success) {
+        console.log('Token validated successfully');
+        return true;
+      } else {
+        console.log('Token validation failed', response);
+        // Clear on invalid token
+        setToken(null);
+        setCurrentUser(null);
+        localStorage.removeItem('token');
+        sessionStorage.removeItem('token');
+        setIsSessionValid(false);
+        setNotification({
+          type: 'error',
+          message: 'Your session is invalid. Please log in again.'
+        });
+        return false;
+      }
+    } catch (error) {
+      console.error('Token validation error:', error);
+      return false;
+    }
+  };
+
   // Login function
   const login = async (email, password) => {
     try {
       setAuthError(null);
       console.log('Starting login process for:', email);
       
-      // First, check if we already have a valid session for this user
-      try {
-        const existingSessions = JSON.parse(localStorage.getItem('userSessions') || '[]');
-        const userSession = existingSessions.find(session => session.email === email);
+      setLoading(true);
+      
+      // Try regular login first
+      const response = await loginVendor(email, password);
+      
+      if (response.success) {
+        console.log('Login successful');
         
-        if (userSession) {
-          console.log('Found existing session for user:', email);
+        // Set token state
+        if (response.token) {
+          setToken(response.token);
+          localStorage.setItem('token', response.token);
+          sessionStorage.setItem('token', response.token);
           
-          // Try to recover the session first
-          try {
-            const recoveryEndpoint = 'http://localhost:5001/api/auth/recover-user-sessions';
-            const recoveryResponse = await axios.post(recoveryEndpoint, { 
-              email 
-            }, {
-              headers: {
-                // Try with any available token
-                'Authorization': `Bearer ${localStorage.getItem('vendorToken') || sessionStorage.getItem('vendorToken')}`
-              },
-              timeout: 5000 // Short timeout as this is pre-login
-            });
-            
-            if (recoveryResponse.data.success) {
-              console.log('Session recovery successful');
-            }
-          } catch (recoveryErr) {
-            console.log('Pre-login recovery attempt failed:', recoveryErr.message);
-          }
-        }
-      } catch (sessionCheckError) {
-        console.error('Error checking existing sessions:', sessionCheckError);
-      }
-      
-      // Now try login with various fallbacks
-      let loginResponse = null;
-      let loginError = null;
-      let attempts = 0;
-      const maxAttempts = 3;
-      
-      while (!loginResponse && attempts < maxAttempts) {
-        try {
-          attempts++;
-          loginResponse = await loginVendor(email, password);
-          break; // Success, exit the loop
-        } catch (err) {
-          loginError = err;
-          console.log(`Login attempt ${attempts} failed:`, err.message);
+          // Also set vendorToken for backward compatibility
+          localStorage.setItem('vendorToken', response.token);
+          sessionStorage.setItem('vendorToken', response.token);
           
-          // If this wasn't the last attempt, wait before trying again
-          if (attempts < maxAttempts) {
-            await new Promise(r => setTimeout(r, 500)); // 500ms delay between retries
-          }
+          // Set user info
+          const userInfo = response.user || response.vendor;
+          localStorage.setItem('vendorInfo', JSON.stringify(userInfo));
+          sessionStorage.setItem('vendorInfo', JSON.stringify(userInfo));
+          
+          // Set current user state
+          setCurrentUser(userInfo);
+          
+          // Set axios default headers
+          axios.defaults.headers.common['Authorization'] = `Bearer ${response.token}`;
         }
-      }
+        
+        return { success: true, user: response.user || response.vendor };
+      } 
       
-      // If all attempts failed, try one last attempt with userType null
-      // This helps with cases where user exists but with a different userType
-      if (!loginResponse) {
+      // If regular login fails, try emergency login as last resort
+      if (!response.success) {
+        console.log('Regular login failed, trying emergency login:', response.error);
         try {
-          console.log('Trying final login attempt without specifying userType');
-          // Direct API call without userType specified
-          const response = await axios.post('http://localhost:5001/api/auth/login', { 
+          const emergencyResponse = await emergencyLogin({ 
             email, 
             password,
-            deviceInfo: {
-              userAgent: navigator.userAgent,
-              platform: navigator.platform,
-              screenSize: `${window.screen.width}x${window.screen.height}`
-            }
+            emergency: true 
           });
           
-          if (response.data && response.data.token) {
-            loginResponse = response.data;
+          if (emergencyResponse.success) {
+            console.log('Emergency login successful');
             
-            // Store token and user info in session/local storage
-            sessionStorage.setItem('vendorToken', loginResponse.token);
-            sessionStorage.setItem('vendorInfo', JSON.stringify(loginResponse.user));
-            localStorage.setItem('vendorToken', loginResponse.token);
-            localStorage.setItem('vendorInfo', JSON.stringify(loginResponse.user));
-            
-            // Save to user sessions for cross-reference
-            try {
-              const existingSessions = JSON.parse(localStorage.getItem('userSessions') || '[]');
-              const sessionInfo = {
-                userId: loginResponse.user._id,
-                email: loginResponse.user.email,
-                userType: loginResponse.user.userType,
-                sessionId: loginResponse.sessionId,
-                lastActive: new Date().toISOString()
-              };
-              
-              // Add or update the session
-              const idx = existingSessions.findIndex(s => s.userId === sessionInfo.userId);
-              if (idx >= 0) {
-                existingSessions[idx] = sessionInfo;
-              } else {
-                existingSessions.push(sessionInfo);
-              }
-              
-              localStorage.setItem('userSessions', JSON.stringify(existingSessions));
-            } catch (sessionError) {
-              console.error('Error saving session info:', sessionError);
+            // Store token and user info
+            if (emergencyResponse.token) {
+              setToken(emergencyResponse.token);
+              localStorage.setItem('token', emergencyResponse.token);
+              sessionStorage.setItem('token', emergencyResponse.token);
+              localStorage.setItem('vendorToken', emergencyResponse.token);
+              sessionStorage.setItem('vendorToken', emergencyResponse.token);
             }
+            
+            const userInfo = emergencyResponse.user || emergencyResponse.vendor;
+            setCurrentUser(userInfo);
+            localStorage.setItem('vendorInfo', JSON.stringify(userInfo));
+            sessionStorage.setItem('vendorInfo', JSON.stringify(userInfo));
+            
+            if (emergencyResponse.token) {
+              axios.defaults.headers.common['Authorization'] = `Bearer ${emergencyResponse.token}`;
+            }
+            
+            return { success: true, emergency: true, user: userInfo };
           }
-        } catch (finalError) {
-          console.error('Final login attempt failed:', finalError);
           
-          // Last resort - try emergency login functionality
-          try {
-            console.log('Attempting EMERGENCY login as absolute last resort');
-            loginResponse = await emergencyLogin(email, password);
-          } catch (emergencyError) {
-            console.error('Emergency login failed:', emergencyError);
-            // Continue with the original error
-          }
+          // If emergency login also fails, show error
+          const errorMessage = emergencyResponse.error || response.error || 'Login failed. Please try again.';
+          setAuthError(errorMessage);
+          console.error('All login attempts failed:', errorMessage);
+          return { success: false, error: errorMessage };
+        } catch (emergencyError) {
+          console.error('Emergency login error:', emergencyError);
+          // Fall through to the error handling below
         }
       }
       
-      // If we have a successful login
-      if (loginResponse && (loginResponse.token || loginResponse.fromCache)) {
-        console.log('Login successful');
-        setCurrentUser(loginResponse.vendor || loginResponse.user);
-        
-        // Set axios default headers with token if we have one
-        if (loginResponse.token) {
-          axios.defaults.headers.common['Authorization'] = `Bearer ${loginResponse.token}`;
-        }
-        
-        return { success: true };
-      } else {
-        // All login attempts failed
-        const errorMessage = loginError?.message || 'Login failed. Please try again.';
-        setAuthError(errorMessage);
-        console.error('Login failed after all attempts:', errorMessage);
-        return { success: false, error: errorMessage };
-      }
+      // If we got here, login failed
+      const errorMessage = response.error || 'Login failed. Please try again.';
+      setAuthError(errorMessage);
+      console.error('Login failed:', errorMessage);
+      return { success: false, error: errorMessage };
     } catch (error) {
       const errorMessage = error.message || 'An unexpected error occurred during login';
       setAuthError(errorMessage);
       console.error('Login process error:', error);
       return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -219,23 +260,53 @@ export function AuthProvider({ children }) {
     try {
       console.log('Logging out user');
       await logoutVendor();
+      
+      // Clear all auth data from storage
+      localStorage.removeItem('token');
+      sessionStorage.removeItem('token');
+      localStorage.removeItem('vendorToken');
+      sessionStorage.removeItem('vendorToken');
+      localStorage.removeItem('vendorInfo');
+      sessionStorage.removeItem('vendorInfo');
+      
+      // Clear state
+      setToken(null);
       setCurrentUser(null);
       setAuthError(null);
       delete axios.defaults.headers.common['Authorization'];
+      
       return { success: true };
     } catch (error) {
       console.error('Logout error:', error);
       // Force logout on client side even if server logout fails
-      sessionStorage.removeItem('vendorToken');
-      sessionStorage.removeItem('vendorInfo');
+      localStorage.removeItem('token');
+      sessionStorage.removeItem('token');
       localStorage.removeItem('vendorToken');
+      sessionStorage.removeItem('vendorToken');
       localStorage.removeItem('vendorInfo');
+      sessionStorage.removeItem('vendorInfo');
       
+      setToken(null);
       setCurrentUser(null);
       delete axios.defaults.headers.common['Authorization'];
       
       return { success: true, error: error.message };
     }
+  };
+
+  // Set a notification that auto-dismisses
+  const notify = (type, message, duration = 3000) => {
+    setNotification({ type, message });
+    
+    // Auto-dismiss after duration
+    setTimeout(() => {
+      setNotification(null);
+    }, duration);
+  };
+
+  // Clear notification manually
+  const clearNotification = () => {
+    setNotification(null);
   };
 
   const value = {
@@ -244,7 +315,12 @@ export function AuthProvider({ children }) {
     logout,
     authError,
     isAuthenticated: !!currentUser,
-    userType: currentUser?.userType
+    userType: currentUser?.userType,
+    token,
+    isSessionValid,
+    notification,
+    notify,
+    clearNotification
   };
 
   return (

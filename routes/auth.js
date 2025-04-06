@@ -12,11 +12,30 @@ router.post('/register', async (req, res) => {
       name: req.body.name
     });
 
-    const { email, password, name, userType, ...otherData } = req.body;
+    // Additional validation to ensure we're getting proper user data
+    if (!req.body) {
+      return res.status(400).json({ error: 'No request body provided' });
+    }
+
+    // Extract and normalize data
+    const { email, password, name, userType, address, ...otherData } = req.body;
+
+    // Check for specific debugging - log if we're getting a customer userType
+    console.log('userType received:', userType);
 
     // Validate required fields
     if (!email || !password || !name || !userType) {
       return res.status(400).json({ error: 'Email, password, name, and userType are required fields' });
+    }
+
+    // Normalize userType to prevent case issues (e.g., "Customer" vs "customer")
+    const normalizedUserType = userType.toLowerCase();
+    
+    // Only allow valid user types 
+    if (!['customer', 'vendor', 'user', 'admin'].includes(normalizedUserType)) {
+      return res.status(400).json({ 
+        error: `Invalid userType: '${userType}'. Allowed values are 'customer', 'vendor', 'user', or 'admin'` 
+      });
     }
 
     // Check if user already exists
@@ -27,40 +46,40 @@ router.post('/register', async (req, res) => {
     }
 
     // Create user object based on type
-    const userData = userType === 'vendor' 
-      ? {
-        // Vendor data includes all fields
+    const userData = {
         email,
         password,
         name,
-        userType,
+      userType: normalizedUserType, // Use normalized value
         phone: otherData.phone || '',
-        address: otherData.address || '',
-        city: otherData.city || '',
-        state: otherData.state || '',
-        zipCode: otherData.zipCode || '',
-        storeName: otherData.storeName || name + "'s Store",
-        registrationDate: new Date(),
         isActive: true,
-        verified: false,
         lastLogin: new Date()
-      }
-      : {
-        // Customer data excludes storeName completely
-        email,
-        password,
-        name,
-        userType, // 'customer'
-        phone: otherData.phone || '',
-        address: otherData.address || '',
-        city: otherData.city || '',
-        state: otherData.state || '',
-        zipCode: otherData.zipCode || '',
-        registrationDate: new Date(),
-        isActive: true,
-        verified: false,
-        lastLogin: new Date()
+    };
+    
+    // Handle address differently based on structure provided
+    if (address && typeof address === 'object') {
+      userData.address = {
+        street: address.street || '',
+        city: address.city || '',
+        state: address.state || '',
+        postalCode: address.postalCode || address.zipCode || '',
+        country: address.country || 'US'
       };
+    } else {
+      // Legacy address handling
+      userData.address = {
+        street: otherData.address || '',
+        city: otherData.city || '',
+        state: otherData.state || '',
+        postalCode: otherData.zipCode || '',
+        country: 'US'
+      };
+    }
+    
+    // Add vendor-specific fields if userType is vendor
+    if (normalizedUserType === 'vendor') {
+      userData.storeName = otherData.storeName || name + "'s Store";
+    }
 
     console.log('Creating new user with data:', {
       email: userData.email,
@@ -69,11 +88,13 @@ router.post('/register', async (req, res) => {
       fields: Object.keys(userData).filter(key => key !== 'password')
     });
 
+    try {
     // Create new user
     user = new User(userData);
     
     // Add initial login history entry with sessionId
     const sessionId = require('crypto').randomBytes(16).toString('hex');
+      user.loginHistory = user.loginHistory || [];
     user.loginHistory.push({
       timestamp: new Date(),
       ipAddress: req.ip || 'unknown',
@@ -85,7 +106,7 @@ router.post('/register', async (req, res) => {
     
     // Save user to database
     await user.save();
-    console.log(`User saved successfully: ${email} (${userType})`);
+      console.log(`User saved successfully: ${email} (${userData.userType})`);
 
     // Generate token with the session ID
     const token = user.generateAuthToken(sessionId);
@@ -97,11 +118,6 @@ router.post('/register', async (req, res) => {
     // Add current session ID to the response
     userResponse.currentSessionId = sessionId;
     
-    // Completely remove storeName from customer users
-    if (userResponse.userType === 'customer') {
-      delete userResponse.storeName;
-    }
-    
     res.status(201).json({
       token,
       user: userResponse,
@@ -109,10 +125,48 @@ router.post('/register', async (req, res) => {
     });
     
     // Log successful registration
-    console.log(`New ${userType} registered: ${email} (${user._id})`);
+      console.log(`New ${userData.userType} registered: ${email} (${user._id})`);
+    } catch (saveError) {
+      console.error('Error saving user:', saveError);
+      
+      // Send more detailed error message
+      if (saveError.name === 'ValidationError') {
+        return res.status(400).json({ 
+          error: `Validation error: ${saveError.message}`,
+          details: saveError.errors
+        });
+      } else {
+        return res.status(500).json({ 
+          error: 'Registration failed: ' + (saveError.message || 'Server error when saving user') 
+        });
+      }
+    }
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ error: 'Registration failed: ' + (error.message || 'Unknown error') });
+    res.status(500).json({ 
+      error: 'Registration failed: ' + (error.message || 'Unknown error'),
+      stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined
+    });
+  }
+});
+
+// Token validation endpoint
+router.get('/validate-token', auth, async (req, res) => {
+  try {
+    // If the auth middleware passed, token is valid
+    return res.json({
+      valid: true,
+      userId: req.user.id,
+      email: req.user.email,
+      userType: req.user.userType,
+      sessionId: req.user.sessionId
+    });
+  } catch (error) {
+    console.error('Token validation error:', error);
+    return res.status(401).json({
+      valid: false,
+      error: 'Invalid token'
+    });
   }
 });
 
@@ -125,95 +179,31 @@ router.post('/login', async (req, res) => {
       emergency: req.body.emergency || false
     });
 
-    const { email, password, userType, deviceInfo, emergency } = req.body;
+    const { email, password, userType, deviceInfo, emergency, clearExisting = true } = req.body;
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    // First try: Exact match with email and userType if provided
+    // Direct database check as a fallback for problematic queries
     let user = null;
     
-    // Create different queries to try in sequence for maximum compatibility
-    const queries = [];
-    
-    // If this is an emergency login, prioritize just finding by email
-    if (emergency) {
-      console.log('EMERGENCY login mode activated - searching by email only');
-      queries.push({ email });
-      if (email.includes('@')) {
-        const lowercaseEmail = email.toLowerCase();
-        if (lowercaseEmail !== email) {
-          queries.push({ email: lowercaseEmail });
-        }
-      }
-    } else {
-      // Normal login flow
-      // If userType specified, try with it first
-      if (userType) {
-        queries.push({ email, userType });
-      }
+    try {
+      // Try a direct lookup by exact email first - most reliable method
+      user = await User.findOne({ email: email });
       
-      // Always try with just email as fallback
-      queries.push({ email });
-      
-      // Try specific types if userType wasn't specified
-      if (!userType) {
-        queries.push({ email, userType: 'vendor' });
-        queries.push({ email, userType: 'customer' });
+      if (!user && email) {
+        // If that fails, try case-insensitive search
+        const emailRegex = new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+        user = await User.findOne({ email: emailRegex });
       }
+    } catch (directLookupError) {
+      console.error('Error with direct user lookup:', directLookupError);
     }
-    
-    // Try each query until we find the user
-    for (const query of queries) {
-      if (!user) {
-        console.log('Trying query:', query);
-        user = await User.findOne(query);
-        
-        if (user) {
-          console.log(`Found user with query: ${JSON.stringify(query)}`);
-          break;
-        }
-      }
-    }
-    
-    // Last resort: If user still not found, try case-insensitive email search
+
+    // If no user found with any query, return error
     if (!user) {
-      console.log('Trying case-insensitive email search');
-      user = await User.findOne({ 
-        email: { $regex: new RegExp(`^${email}$`, 'i') } 
-      });
-      
-      if (user) {
-        console.log('Found user using case-insensitive email match');
-      }
-    }
-    
-    // Extra last resort for emergency login: Try finding any user in the database
-    // that might be similar to the given email (ONLY in emergency mode)
-    if (!user && emergency && email.includes('@')) {
-      const emailParts = email.split('@');
-      if (emailParts.length === 2) {
-        const usernameStart = emailParts[0].substring(0, Math.min(4, emailParts[0].length));
-        if (usernameStart.length >= 2) {
-          console.log(`Emergency: Searching for users with email starting with: ${usernameStart}`);
-          
-          const potentialUsers = await User.find({
-            email: { $regex: new RegExp(`^${usernameStart}`, 'i') }
-          }).limit(5);
-          
-          if (potentialUsers.length === 1) {
-            user = potentialUsers[0];
-            console.log(`Emergency match: Found single user ${user.email} matching pattern`);
-          } else if (potentialUsers.length > 1) {
-            console.log(`Emergency: Found ${potentialUsers.length} potential users, cannot automatically select one`);
-          }
-        }
-      }
-    }
-    
-    if (!user) {
-      console.log('Login failed: No user found matching email:', email);
+      console.log(`Login failed: No user found matching email: ${email}`);
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
@@ -223,215 +213,86 @@ router.post('/login', async (req, res) => {
       userType: user.userType 
     });
 
-    // Check password
-    let isMatch = false;
-    try {
-      isMatch = await user.comparePassword(password);
-    } catch (passwordError) {
-      console.error('Error comparing password:', passwordError);
-      
-      // Last resort password check - compare directly if in development
-      // This is insecure but helps recover accounts in extreme cases
-      if ((process.env.NODE_ENV !== 'production' || emergency) && password === user.password) {
-        console.warn('WARNING: Using direct password comparison as last resort');
-        isMatch = true;
-        
-        // Try to fix the password hash
-        try {
-          user.password = password; // This will trigger pre-save hook to hash it
-          await user.save();
-          console.log('User password hash has been repaired');
-        } catch (repairError) {
-          console.error('Failed to repair password hash:', repairError);
-        }
-      }
-      
-      // In emergency mode, as an absolute last resort, allow login with a common
-      // test password if nothing else works
-      if (!isMatch && emergency && ['password123', 'test123', 'admin123'].includes(password)) {
-        const isEmergencyUser = user.email.includes('admin') || 
-                                user.email.includes('test') || 
-                                user.name.includes('Admin') ||
-                                user.userType === 'vendor';
-        
-        if (isEmergencyUser) {
-          console.warn('⚠️ EMERGENCY OVERRIDE: Allowing login with test password');
-          isMatch = true;
-          
-          // Fix the password
-          try {
-            user.password = password;
-            await user.save();
-            console.log('Emergency password reset performed');
-          } catch (resetError) {
-            console.error('Failed emergency password reset:', resetError);
-          }
-        }
-      }
-    }
-    
+    // Verify password
+    const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      // Record failed login attempt
-      try {
-        await user.recordLogin(
-          req.ip || 'unknown',
-          deviceInfo?.userAgent || req.headers['user-agent'] || 'unknown',
-          false
-        );
-      } catch (recordError) {
-        console.error('Error recording failed login:', recordError);
-      }
-      
       console.log('Login failed: Invalid password for user:', user.email);
-      return res.status(400).json({ error: 'Invalid credentials' });
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Check if the user account is active
-    if (user.isActive === false) {
-      // Reactivate account in emergency mode
-      if (emergency) {
-        user.isActive = true;
-        await user.save();
-        console.log('Emergency: Reactivated user account:', user.email);
-      } else {
-        console.log('Login failed: User account is inactive:', user.email);
-        return res.status(403).json({ 
-          error: 'Your account has been deactivated. Please contact support for assistance.'
-        });
-      }
-    }
-
-    // Generate a unique session ID
+    // Generate session ID
     const sessionId = require('crypto').randomBytes(16).toString('hex');
-    
-    // Extract detailed device information
-    const deviceString = deviceInfo?.userAgent || req.headers['user-agent'] || 'unknown';
-    
-    // Record successful login with session ID and device info
-    let loginRecord;
-    try {
-      loginRecord = await user.recordLoginWithSession(
-        req.ip || 'unknown',
-        deviceString,
-        true,
-        sessionId
-      );
-    } catch (loginRecordError) {
-      console.error('Error recording login:', loginRecordError);
-      // Generate a new sessionId if the original recording failed
-      loginRecord = {
-        sessionId: require('crypto').randomBytes(16).toString('hex'),
-        success: true
-      };
-    }
 
-    // Get final sessionId (could be different if generated in recordLoginWithSession)
-    const finalSessionId = loginRecord.sessionId || sessionId;
-    
-    // Generate token with session ID included
-    const token = user.generateAuthToken(finalSessionId);
+    // Record login in the user document with the session ID
+    await user.recordLoginWithSession(
+      req.ip || 'unknown',
+      deviceInfo?.userAgent || req.headers['user-agent'] || 'unknown',
+      true,
+      sessionId
+    );
 
-    // Remove password from response
-    const userResponse = user.toObject();
-    delete userResponse.password;
+    // Explicitly ensure the session is in UserSession collection
+    const userSession = new UserSession({
+      userId: user._id,
+      userEmail: user.email,
+      userType: user.userType,
+      sessionId: sessionId,
+      ipAddress: req.ip || 'unknown',
+      device: deviceInfo?.userAgent || req.headers['user-agent'] || 'unknown',
+      browser: deviceInfo?.browser || 'Unknown',
+      os: deviceInfo?.platform || 'Unknown',
+      startTime: new Date(),
+      lastActivity: new Date(),
+      active: true,
+      storeName: user.userType === 'vendor' ? user.storeName : undefined
+    });
     
-    // Update user's last login time
-    user.lastLogin = new Date();
     try {
-      await user.save();
-    } catch (saveError) {
-      console.error('Error saving user after login:', saveError);
-      // Continue even if save fails - token is still valid
-    }
-    
-    // If user types don't match what was requested, log it but still allow login
-    if (userType && user.userType !== userType) {
-      console.log(`Note: User ${email} logged in as ${user.userType} but requested ${userType}`);
-      // Include a warning in response
-      userResponse.typeWarning = `Logged in as ${user.userType} instead of requested ${userType}`;
-    }
-    
-    // If this was an emergency login, add a note
-    if (emergency) {
-      userResponse.emergencyLogin = true;
-      console.log(`Emergency login successful for ${user.email}`);
-    }
-    
-    // Completely remove storeName from customer users
-    if (userResponse.userType === 'customer') {
-      delete userResponse.storeName;
-    }
-    
-    // For security, don't send full login history to client
-    if (userResponse.loginHistory) {
-      userResponse.lastLogin = userResponse.lastLogin || new Date();
-      userResponse.loginCount = userResponse.loginHistory.length;
-      userResponse.currentSessionId = finalSessionId;
+      // First check if this session already exists
+      const existingSession = await UserSession.findOne({ sessionId });
       
-      // Just send last 5 logins
-      userResponse.recentLogins = userResponse.loginHistory
-        .slice(-5)
-        .map(login => ({
-          timestamp: login.timestamp,
-          device: login.device,
-          browser: login.browser,
-          os: login.os,
-          success: login.success
-        }));
-      
-      delete userResponse.loginHistory;
-    }
-
-    // Ensure the UserSession collection has this session - critical for cross-referencing
-    try {
-      // First check if the session exists
-      let userSessionDoc = await UserSession.findOne({ sessionId: finalSessionId });
-      
-      if (!userSessionDoc) {
-        // Create a new session document if it doesn't exist
-        userSessionDoc = new UserSession({
-          userId: user._id,
-          userEmail: user.email,
-          userType: user.userType,
-          sessionId: finalSessionId,
-          device: deviceString,
-          ipAddress: req.ip || 'unknown',
-          browser: deviceString.includes('Chrome') ? 'Chrome' : 
-                  deviceString.includes('Firefox') ? 'Firefox' : 
-                  deviceString.includes('Safari') ? 'Safari' : 'Unknown',
-          os: deviceString.includes('Windows') ? 'Windows' : 
-              deviceString.includes('Mac') ? 'Mac' : 
-              deviceString.includes('Linux') ? 'Linux' : 'Unknown',
-          startTime: new Date(),
-          lastActivity: new Date(),
-          active: true,
-          storeName: user.userType === 'vendor' ? user.storeName : undefined
-        });
-        
-        await userSessionDoc.save();
-        console.log(`Session created in UserSession collection: ${finalSessionId}`);
+      if (!existingSession) {
+        await userSession.save();
+        console.log(`Created new session in UserSession collection during login: ${sessionId}`);
       } else {
-        // Update existing session
-        userSessionDoc.active = true;
-        userSessionDoc.lastActivity = new Date();
-        await userSessionDoc.save();
-        console.log(`Session updated in UserSession collection: ${finalSessionId}`);
+        // Update the existing session
+        existingSession.lastActivity = new Date();
+        existingSession.active = true;
+        await existingSession.save();
+        console.log(`Updated existing session in UserSession collection: ${sessionId}`);
       }
     } catch (sessionError) {
-      console.error('Error managing session in UserSession collection:', sessionError);
-      // Continue login process even if session management fails
+      console.error('Error saving session to UserSession collection:', sessionError);
+      // Continue execution even if session save fails
     }
 
-    console.log(`User logged in successfully: ${user.email} (${user.userType}) with session ${finalSessionId}`);
+    // Generate token with the session ID
+    const token = user.generateAuthToken(sessionId);
+
+    // Create sanitized user response
+    const userResponse = user.toObject();
+    delete userResponse.password;
+    delete userResponse.passwordResetToken;
+    delete userResponse.passwordResetExpires;
+    delete userResponse.emailVerificationToken;
+    delete userResponse.loginHistory; // Don't send full history to client
+    
+    // Add useful session info
+    userResponse.lastLogin = new Date();
+    userResponse.currentSessionId = sessionId;
+    
+    console.log(`Login successful: ${user.email} (${user.userType}) with session ${sessionId}`);
     
     res.json({
       token,
       user: userResponse,
-      sessionId: finalSessionId
+      sessionId
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed: ' + (error.message || 'Server error') });
+    res.status(500).json({ 
+      error: error.message || 'Authentication failed. Please try again.'
+    });
   }
 });
 

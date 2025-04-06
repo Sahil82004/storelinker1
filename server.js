@@ -36,15 +36,70 @@ mongoose.connect(MONGODB_URI, mongooseOptions)
     await Promise.all([
       mongoose.connection.db.collection('users').createIndex({ email: 1 }, { unique: true }),
       mongoose.connection.db.collection('products').createIndex({ vendorId: 1 }),
-      mongoose.connection.db.collection('stores').createIndex({ vendorId: 1 })
+      mongoose.connection.db.collection('stores').createIndex({ vendorId: 1 }),
+      // Add indexes for UserSession collection
+      mongoose.connection.db.collection('usersessions').createIndex({ sessionId: 1 }, { unique: true }),
+      mongoose.connection.db.collection('usersessions').createIndex({ userId: 1 }),
+      mongoose.connection.db.collection('usersessions').createIndex({ active: 1 }),
+      mongoose.connection.db.collection('usersessions').createIndex({ lastActivity: 1 })
     ]);
-    console.log('Database indexes created successfully for users, products, and stores collections');
+    console.log('Database indexes created successfully for users, products, stores, and usersessions collections');
     
     // Fix any customer records with storeName values
     const { User } = require('./models/User');
     const fixedCount = await User.fixCustomerStoreNames();
     if (fixedCount > 0) {
       console.log(`Fixed ${fixedCount} customer accounts with incorrect storeName values`);
+    }
+    
+    // Migrate login sessions from user documents to UserSession collection
+    try {
+      const { UserSession } = require('./models/User');
+      const users = await User.find({ 
+        loginHistory: { $exists: true, $ne: [] } 
+      });
+      
+      console.log(`Found ${users.length} users with login history to check for session migration`);
+      
+      let migratedSessions = 0;
+      
+      for (const user of users) {
+        const activeSessions = user.loginHistory.filter(session => 
+          session.sessionId && (session.active === true || session.active === undefined)
+        );
+        
+        for (const session of activeSessions) {
+          // Check if session already exists in UserSession collection
+          const existingSession = await UserSession.findOne({ sessionId: session.sessionId });
+          
+          if (!existingSession) {
+            // Create new session in UserSession collection
+            const newSession = new UserSession({
+              userId: user._id,
+              userEmail: user.email,
+              userType: user.userType,
+              sessionId: session.sessionId,
+              device: session.device || 'Unknown',
+              ipAddress: session.ipAddress || 'Unknown',
+              browser: session.browser || 'Unknown',
+              os: session.os || 'Unknown',
+              startTime: session.timestamp || new Date(),
+              lastActivity: session.lastUpdated || new Date(),
+              active: true,
+              storeName: user.userType === 'vendor' ? user.storeName : undefined
+            });
+            
+            await newSession.save();
+            migratedSessions++;
+          }
+        }
+      }
+      
+      if (migratedSessions > 0) {
+        console.log(`Migrated ${migratedSessions} login sessions to UserSession collection`);
+      }
+    } catch (migrationError) {
+      console.error('Error migrating login sessions:', migrationError);
     }
   } catch (indexError) {
     console.error('Error creating indexes or fixing customer records:', indexError);
@@ -88,6 +143,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/vendors', require('./routes/vendors'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/stores', require('./routes/stores'));
+app.use('/api/users', require('./routes/users'));
 
 // Add route for user sessions - can access session data without affecting auth routes
 const { UserSession } = require('./models/User');

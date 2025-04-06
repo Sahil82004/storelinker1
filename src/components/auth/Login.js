@@ -30,16 +30,16 @@ export default function Login() {
     }
     
     try {
-      setError('');
+    setError('');
       setIsLoading(true);
 
       // Call login function from auth context
-      const result = await login(email, password);
+    const result = await login(email, password);
       
-      if (result.success) {
+    if (result.success) {
         console.log('Login successful, redirecting to dashboard');
-        navigate('/dashboard');
-      } else {
+      navigate('/dashboard');
+    } else {
         setError(result.error || 'Login failed. Please try again.');
       }
     } catch (err) {

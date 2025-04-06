@@ -3,16 +3,85 @@ import { saveUserToCollection } from '../utils/dbSync';
 
 const API_URL = 'http://localhost:5001/api';
 
+// Configuration for server URLs
+const devConfig = {
+  apiUrl: 'http://localhost:5002/api',
+  authUrl: 'http://localhost:5002/api/auth',
+  productUrl: 'http://localhost:5002/api/products',
+  vendorUrl: 'http://localhost:5002/api/vendors',
+  storeUrl: 'http://localhost:5002/api/stores'
+};
+
+// Set API URLs based on environment
+const apiConfig = process.env.NODE_ENV === 'production' 
+  ? {
+      apiUrl: '/api',
+      authUrl: '/api/auth',
+      productUrl: '/api/products',
+      vendorUrl: '/api/vendors',
+      storeUrl: '/api/stores'
+    } 
+  : devConfig;
+
+// Initialize axios instance with base URL
+const api = axios.create({
+  baseURL: apiConfig.apiUrl
+});
+
+// Add authorization header to all requests if token exists
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 // Check if vendor is logged in
 export const isVendorLoggedIn = () => {
-  const token = sessionStorage.getItem('vendorToken');
-  return !!token;
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+  if (!token) return false;
+  
+  try {
+    // Parse token to check if it's for a vendor
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(window.atob(base64));
+    
+    // Check if token is expired
+    const currentTime = Date.now() / 1000;
+    if (payload.exp && payload.exp < currentTime) {
+      console.log('Token expired');
+      return false;
+    }
+    
+    return payload.userType === 'vendor';
+  } catch (err) {
+    console.error('Error parsing auth token:', err);
+    return false;
+  }
 };
 
 // Get vendor info
-export const getVendorInfo = () => {
-  const vendorInfo = sessionStorage.getItem('vendorInfo');
-  return vendorInfo ? JSON.parse(vendorInfo) : null;
+export const getVendorInfo = async () => {
+  try {
+    const response = await api.get(`${apiConfig.vendorUrl}/me`);
+    return {
+      success: true,
+      vendor: response.data
+    };
+  } catch (error) {
+    console.error('Error fetching vendor info:', error);
+    return {
+      success: false,
+      error: error.response?.data?.message || 'Failed to fetch vendor information'
+    };
+  }
 };
 
 // Get product by ID
@@ -111,200 +180,208 @@ export const registerVendor = async (vendorData) => {
 
 // Login vendor
 export const loginVendor = async (email, password) => {
+  console.log(`Attempting vendor login: ${email}`);
+  
   try {
-    // Get device info for tracking
-    const deviceInfo = {
-      userAgent: navigator.userAgent,
-      platform: navigator.platform,
-      screenSize: `${window.screen.width}x${window.screen.height}`
-    };
+    // Try multiple endpoints to handle different server configurations
+    const endpoints = [
+      `${apiConfig.authUrl}/login`,
+      'http://localhost:5001/api/auth/login',
+      'http://localhost:5002/api/auth/login'
+    ];
     
-    console.log('Attempting vendor login for:', email);
+    let error = null;
     
-    // Try different login approaches to maximize success chance
-    let response;
-    let error;
-    
-    // First approach: Try with vendor userType
-    try {
-      response = await axios.post(`${API_URL}/auth/login`, { 
-        email, 
-        password,
-        userType: 'vendor',
-        deviceInfo
-      }, {
-        timeout: 10000 // 10 second timeout
-      });
-    } catch (err) {
-      console.log('First login attempt failed:', err.message);
-      error = err;
-      
-      // Second approach: Try without specifying userType
+    // Try each endpoint until one succeeds
+    for (const endpoint of endpoints) {
       try {
-        console.log('Trying login without userType specification');
-        response = await axios.post(`${API_URL}/auth/login`, { 
-          email, 
-          password,
-          deviceInfo
-        }, {
-          timeout: 10000 // 10 second timeout
+        console.log(`Trying login at endpoint: ${endpoint}`);
+        
+        const response = await axios.post(endpoint, {
+      email, 
+      password,
+      userType: 'vendor',
+          deviceInfo: {
+            userAgent: navigator.userAgent,
+            platform: navigator.platform,
+            screenSize: `${window.innerWidth}x${window.innerHeight}`
+          },
+          // Set to false to prevent clearing existing sessions
+          clearExisting: false
         });
-      } catch (fallbackErr) {
-        console.log('Fallback login attempt also failed:', fallbackErr.message);
         
-        // Final approach: Try a direct recovery for any user with this email
-        try {
-          console.log('Attempting direct session recovery for:', email);
-          // Try to find the user in localStorage by email
-          const savedUsers = JSON.parse(localStorage.getItem('userSessions') || '[]');
-          const matchingUser = savedUsers.find(u => u.email === email);
+        if (response.data && response.data.token) {
+          console.log('Login successful');
           
-          if (matchingUser) {
-            console.log('Found matching user in localStorage:', matchingUser.email);
-            
-            // Try to recover the session
-            const recoveryEndpoint = `${API_URL}/auth/recover-user-sessions`;
-            const recoveryResponse = await axios.post(recoveryEndpoint, { 
-              email 
-            }, {
-              headers: {
-                // Try with any available token
-                'Authorization': `Bearer ${localStorage.getItem('vendorToken') || sessionStorage.getItem('vendorToken')}`
-              },
-              timeout: 15000
-            });
-            
-            if (recoveryResponse.data.success) {
-              console.log('Session recovery successful, trying login again');
-              
-              // Try login once more after recovery
-              response = await axios.post(`${API_URL}/auth/login`, { 
-                email, 
-                password
-              }, {
-                timeout: 10000
-              });
-            }
-          }
-        } catch (recoveryErr) {
-          console.log('Recovery attempt failed:', recoveryErr.message);
+          // Store token in both localStorage and sessionStorage for redundancy
+          localStorage.setItem('token', response.data.token);
+          sessionStorage.setItem('token', response.data.token);
+          
+          // Also store in legacy locations for backward compatibility
+          localStorage.setItem('vendorToken', response.data.token);
+          sessionStorage.setItem('vendorToken', response.data.token);
+          
+          // Store vendor info
+          const vendorInfo = response.data.user;
+          localStorage.setItem('vendorInfo', JSON.stringify(vendorInfo));
+          sessionStorage.setItem('vendorInfo', JSON.stringify(vendorInfo));
+          
+          // Return success response
+          return {
+            success: true,
+            token: response.data.token,
+            user: vendorInfo,
+            vendor: vendorInfo,
+            sessionId: response.data.sessionId || vendorInfo.currentSessionId
+          };
         }
-        
-        // If all attempts failed, throw the original error
-        if (!response) {
-          throw error;
-        }
+      } catch (endpointError) {
+        console.error(`Login failed at ${endpoint}:`, endpointError.message);
+        error = endpointError;
+        // Continue to next endpoint
       }
     }
     
-    // Check if we received valid response data
-    if (!response || !response.data || !response.data.token || !response.data.user) {
-      console.error('Invalid response from server:', response?.data);
-      throw new Error('Server returned invalid login data');
-    }
-    
-    const { token, user, sessionId } = response.data;
-    
-    // Log any type warnings
-    if (response.data.user.typeWarning) {
-      console.warn(response.data.user.typeWarning);
-    }
-    
-    // Enhance user object with any additional data needed for the application
-    const enhancedUser = {
-      ...user,
-      lastLogin: new Date().toISOString(),
-      sessionId: sessionId || user.sessionId || `session_${Date.now()}`
-    };
-    
-    // Clear any existing session data to prevent conflicts
-    localStorage.removeItem('vendorToken');
-    localStorage.removeItem('vendorInfo');
-    sessionStorage.removeItem('vendorToken');
-    sessionStorage.removeItem('vendorInfo');
-    
-    // Store token and user info in localStorage for persistence
-    localStorage.setItem('vendorToken', token);
-    localStorage.setItem('vendorInfo', JSON.stringify(enhancedUser));
-    
-    // Also store in sessionStorage for quicker access
-    sessionStorage.setItem('vendorToken', token);
-    sessionStorage.setItem('vendorInfo', JSON.stringify(enhancedUser));
-    
-    // Also store in local storage as part of user sessions for cross-referencing
+    // If all regular attempts fail, try without specifying userType
     try {
-      const sessions = JSON.parse(localStorage.getItem('userSessions') || '[]');
-      const sessionData = {
-        userId: enhancedUser._id,
-        email: enhancedUser.email,
-        userType: enhancedUser.userType,
-        sessionId: enhancedUser.sessionId,
-        lastActive: new Date().toISOString()
-      };
+      console.log('Trying login without specifying userType');
+      const response = await axios.post(`${apiConfig.authUrl}/login`, {
+        email,
+        password,
+        deviceInfo: {
+          userAgent: navigator.userAgent
+        },
+        clearExisting: false
+      });
       
-      // Add to sessions or update if exists
-      const existingIndex = sessions.findIndex(s => s.sessionId === sessionId);
-      if (existingIndex >= 0) {
-        sessions[existingIndex] = sessionData;
-      } else {
-        sessions.push(sessionData);
-      }
-      
-      // Limit to last 10 sessions
-      const limitedSessions = sessions.slice(-10);
-      localStorage.setItem('userSessions', JSON.stringify(limitedSessions));
-    } catch (storageError) {
-      console.error('Error saving session data to localStorage:', storageError);
-    }
-    
-    // Save user data to collection using our sync utility
-    try {
-      await saveUserToCollection(enhancedUser, 'vendor');
-      console.log('Vendor login successful:', enhancedUser.email);
-    } catch (syncError) {
-      console.error('Error syncing user data to collection:', syncError);
-    }
-    
-    return { token, vendor: enhancedUser, sessionId: enhancedUser.sessionId };
-  } catch (error) {
-    console.error('Vendor login error:', error);
-    
-    // Try to recover session from local storage if API fails
-    try {
-      const storedToken = localStorage.getItem('vendorToken');
-      const storedUser = JSON.parse(localStorage.getItem('vendorInfo') || '{}');
-      
-      if (storedToken && storedUser && storedUser.email === email) {
-        console.log('Using cached credentials as fallback');
+      if (response.data && response.data.token) {
+        console.log('Login successful without userType specification');
         
-        // Move to sessionStorage for current session
-        sessionStorage.setItem('vendorToken', storedToken);
-        sessionStorage.setItem('vendorInfo', JSON.stringify(storedUser));
+        // Store token in both storage locations
+        localStorage.setItem('token', response.data.token);
+        sessionStorage.setItem('token', response.data.token);
+        localStorage.setItem('vendorToken', response.data.token);
+        sessionStorage.setItem('vendorToken', response.data.token);
         
-        // Return the cached data
-        return { 
-          token: storedToken, 
-          vendor: storedUser, 
-          sessionId: storedUser.sessionId,
-          fromCache: true 
+        // Store vendor info
+        const vendorInfo = response.data.user;
+        localStorage.setItem('vendorInfo', JSON.stringify(vendorInfo));
+        sessionStorage.setItem('vendorInfo', JSON.stringify(vendorInfo));
+        
+        return {
+          success: true,
+          token: response.data.token,
+          user: vendorInfo,
+          vendor: vendorInfo,
+          sessionId: response.data.sessionId || vendorInfo.currentSessionId
         };
       }
-    } catch (recoveryError) {
-      console.error('Error recovering session from cache:', recoveryError);
+    } catch (genericError) {
+      console.error('Generic login attempt failed:', genericError.message);
+      error = genericError;
     }
     
-    // Provide more descriptive error messages based on the error type
-    if (error.response) {
-      if (error.response.status === 401) {
-        throw new Error('Invalid email or password. Please try again.');
-      } else if (error.response.status === 403) {
-        throw new Error('Your account has been suspended. Please contact support.');
-      } else if (error.response.data && error.response.data.error) {
-        throw new Error(error.response.data.error);
+    // If all attempts fail, try emergency login
+    try {
+      return await emergencyLogin({ email, password });
+    } catch (emergencyError) {
+      console.error('Emergency login failed:', emergencyError);
+      error = emergencyError;
+    }
+    
+    // All login attempts failed
+    return {
+      success: false,
+      error: error?.response?.data?.error || error?.message || 'Login failed after multiple attempts'
+    };
+  } catch (error) {
+    console.error('Login error:', error);
+    return {
+      success: false,
+      error: error?.response?.data?.error || error.message
+    };
+  }
+};
+
+// Validate auth token
+export const validateAuthToken = async (token) => {
+  console.log('Validating auth token...');
+  try {
+    // Try validation at multiple endpoints to handle potential port differences
+    const endpoints = [
+      `${apiConfig.authUrl}/validate-token`,
+      'http://localhost:5001/api/auth/validate-token',
+      'http://localhost:5002/api/auth/validate-token'
+    ];
+    
+    for (const endpoint of endpoints) {
+      try {
+        const response = await axios.get(endpoint, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          },
+          timeout: 5000 // Set reasonable timeout
+        });
+        
+        if (response.data && (response.data.valid || response.data.userId)) {
+          console.log('Token validation successful at endpoint:', endpoint);
+          return {
+            success: true,
+            user: response.data
+          };
+        }
+      } catch (endpointError) {
+        console.warn(`Token validation failed at ${endpoint}:`, endpointError.message);
+        // Continue to next endpoint on failure
       }
     }
     
-    throw new Error('Login failed: ' + (error.message || 'Server connection error. Please try again later.'));
+    // If we've tried all endpoints without success, try manual decoding
+    try {
+      // Basic token structure check (without crypto validation)
+      const tokenParts = token.split('.');
+      if (tokenParts.length !== 3) {
+        throw new Error('Invalid token format');
+      }
+      
+      // Decode payload
+      const base64Url = tokenParts[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const payload = JSON.parse(atob(base64));
+      
+      // Check expiration
+      if (payload.exp) {
+        const currentTime = Math.floor(Date.now() / 1000);
+        if (payload.exp < currentTime) {
+          console.log('Token is expired');
+          return { success: false, error: 'Token expired' };
+        }
+      }
+      
+      // If we have basic user info, consider it a partial success
+      if (payload.id && payload.email) {
+        console.log('Token validation: basic structure check passed');
+        return {
+          success: true,
+          user: payload,
+          warning: 'Could not cryptographically verify token'
+        };
+      }
+    } catch (decodeError) {
+      console.error('Error decoding token:', decodeError);
+    }
+    
+    // All validation attempts failed
+    return {
+      success: false,
+      error: 'Token validation failed'
+    };
+  } catch (error) {
+    console.error('Token validation error:', error);
+    return {
+      success: false,
+      error: error.message || 'Token validation failed'
+    };
   }
 };
 
@@ -746,5 +823,28 @@ export const emergencyLogin = async (email, password) => {
   } catch (error) {
     console.error('Emergency login failed:', error);
     throw error;
+  }
+};
+
+// Validate auth token with server
+export const validateToken = async (token) => {
+  console.log('Validating token with server...');
+  try {
+    const response = await axios.get(`${apiConfig.authUrl}/validate-token`, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    
+    return {
+      success: true,
+      user: response.data
+    };
+  } catch (error) {
+    console.error('Token validation error:', error.response?.data || error.message);
+    return {
+      success: false,
+      error: error.response?.data?.message || 'Invalid token'
+    };
   }
 }; 
